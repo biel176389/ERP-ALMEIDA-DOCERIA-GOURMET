@@ -17,15 +17,24 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js">
 </script>
-<script>
-  const firebaseConfig = {
-  apiKey: "AIzaSyCItji6rUERsaVtv2mbTXkAoY3GYxzOqOs",
-    authDomain: "erp-doceria-almeida.firebaseapp.com",
-    projectId: "erp-doceria-almeida",
-    storageBucket: "erp-doceria-almeida.firebasestorage.app",
-    messagingSenderId: "681128555274",
-    appId: "1:681128555274:web:de374ea428bc135c4480f3"
-  };
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+const firebaseConfig = {
+apiKey: "AIzaSyCItji6rUERsaVtv2mbTXkAoY3GYxzOqOs",
+authDomain: "erp-doceria-almeida.firebaseapp.com",
+projectId: "erp-doceria-almeida",
+storageBucket: "erp-doceria-almeida.firebasestorage.app",
+messagingSenderId: "681128555274",
+appId: "1:681128555274:web:de374ea428bc135c4480f3"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const rtdb = getDatabase(app);
+console.log("Firebase inicializado com sucesso!");
 </script>
 <style>
   :root {
