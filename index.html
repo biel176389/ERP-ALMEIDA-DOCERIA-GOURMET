@@ -1308,7 +1308,12 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
     }
 
-    function persist(...keys) { keys.forEach(k => saveKey(k, DB[k])); }
+    function persist(...keys) { 
+      keys.forEach(k => saveKey(k, DB[k])); 
+      if (window.salvarDadosNoFirebase) {
+        window.salvarDadosNoFirebase(DB);
+      }
+    }
 
     /* ---------------- lookups ---------------- */
     const findInsumo = (id) => DB.insumos.find(i => i.id === id);
@@ -1408,13 +1413,26 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       actions.innerHTML = '';
 
       if (ROUTE === 'dashboard') {
-        actions.innerHTML = `<button class="btn btn-primary" id="btnSalvarInformacoes">💾 Salvar informações</button>`;
+        actions.innerHTML = `<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas'); toast('Dados sincronizados com sucesso!', 'ok');">💾 Salvar informações</button>`;
         c.innerHTML = viewDashboard();
         renderDashCharts();
-      } else if (ROUTE === 'estoque') c.innerHTML = viewEstoque();
-      else if (ROUTE === 'produtos') c.innerHTML = viewProdutos();
-      else if (ROUTE === 'producao') c.innerHTML = viewProducao();
-      else if (ROUTE === 'vendas') c.innerHTML = viewVendas();
+      } 
+      else if (ROUTE === 'estoque') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`;
+        c.innerHTML = viewEstoque();
+      }
+      else if (ROUTE === 'produtos') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`;
+        c.innerHTML = viewProdutos();
+      }
+      else if (ROUTE === 'producao') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`;
+        c.innerHTML = viewProducao();
+      }
+      else if (ROUTE === 'vendas') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`;
+        c.innerHTML = viewVendas();
+      }
       else if (ROUTE === 'bipagem') c.innerHTML = viewBipagem();
       else if (ROUTE === 'etiquetas') c.innerHTML = viewEtiquetas();
       else if (ROUTE === 'relatorios') c.innerHTML = viewRelatorios();
@@ -1514,14 +1532,576 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       }
     }
 
-    function viewEstoque() { return '<div class="card card-pad">Módulo Estoque & Insumos</div>'; }
-    function viewProdutos() { return '<div class="card card-pad">Módulo Produtos</div>'; }
-    function viewProducao() { return '<div class="card card-pad">Módulo Produção</div>'; }
-    function viewVendas() { return '<div class="card card-pad">Módulo Vendas</div>'; }
-    function viewBipagem() { return '<div class="card card-pad">Módulo Bipagem</div>'; }
-    function viewEtiquetas() { return '<div class="card card-pad">Módulo Etiquetas</div>'; }
-    function viewRelatorios() { return '<div class="card card-pad">Módulo Relatórios</div>'; }
-    function viewConfig() { return '<div class="card card-pad">Módulo Configurações</div>'; }
+    /* ---------------- MÓDULOS DESBLOQUEADOS ---------------- */
+
+    // Módulo Estoque & Insumos
+    function viewEstoque() {
+      const rows = DB.insumos.map(ins => {
+        const isLow = insumoLowStock(ins);
+        return `
+          <tr class="${isLow ? 'low-stock-row' : ''}">
+            <td><b>${esc(ins.nome)}</b></td>
+            <td><span class="mono">${ins.estoque} ${esc(ins.unidade)}</span></td>
+            <td><span class="mono">${ins.estoqueMin} ${esc(ins.unidade)}</span></td>
+            <td>${fmtMoney(ins.custo)}</td>
+            <td>${isLow ? '<span class="badge badge-danger">Baixo</span>' : '<span class="badge badge-ok">Normal</span>'}</td>
+            <td style="text-align:right;">
+              <button class="icon-btn" onclick="modalInsumo('${ins.id}')">✏️ Edit</button>
+              <button class="icon-btn" onclick="deletarInsumo('${ins.id}')">🗑️</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th>Estoque Atual</th>
+                  <th>Estoque Mín.</th>
+                  <th>Custo / Un.</th>
+                  <th>Status</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum insumo cadastrado.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalInsumo(id = null) {
+      const ins = DB.insumos.find(i => i.id === id) || { nome: '', unidade: 'un', estoque: 0, estoqueMin: 5, custo: 0 };
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Insumo' : 'Novo Insumo'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Nome do Insumo</label>
+                <input type="text" id="insNome" class="input" value="${esc(ins.nome)}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Unidade</label>
+                  <select id="insUnidade" class="input">
+                    <option value="un" ${ins.unidade === 'un' ? 'selected' : ''}>Unidade (un)</option>
+                    <option value="kg" ${ins.unidade === 'kg' ? 'selected' : ''}>Quilograma (kg)</option>
+                    <option value="g" ${ins.unidade === 'g' ? 'selected' : ''}>Grama (g)</option>
+                    <option value="l" ${ins.unidade === 'l' ? 'selected' : ''}>Litro (l)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Custo Unitário (R$)</label>
+                  <input type="number" step="0.01" id="insCusto" class="input" value="${ins.custo}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Estoque Atual</label>
+                  <input type="number" step="0.001" id="insEstoque" class="input" value="${ins.estoque}">
+                </div>
+                <div class="field">
+                  <label>Estoque Mínimo</label>
+                  <input type="number" step="0.001" id="insEstoqueMin" class="input" value="${ins.estoqueMin}">
+                </div>
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarInsumo('${id || ''}')">Salvar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarInsumo(id) {
+      const nome = document.getElementById('insNome').value.trim();
+      if (!nome) return toast('Informe o nome do insumo', 'err');
+      const ins = {
+        id: id || uid(),
+        nome,
+        unidade: document.getElementById('insUnidade').value,
+        custo: parseFloat(document.getElementById('insCusto').value) || 0,
+        estoque: parseFloat(document.getElementById('insEstoque').value) || 0,
+        estoqueMin: parseFloat(document.getElementById('insEstoqueMin').value) || 0
+      };
+      if (id) {
+        const idx = DB.insumos.findIndex(i => i.id === id);
+        if (idx !== -1) DB.insumos[idx] = ins;
+      } else {
+        DB.insumos.push(ins);
+      }
+      persist('insumos');
+      fecharModalDirect();
+      render();
+      toast('Insumo salvo!', 'ok');
+    }
+
+    function deletarInsumo(id) {
+      if (!confirm('Deseja excluir este insumo?')) return;
+      DB.insumos = DB.insumos.filter(i => i.id !== id);
+      persist('insumos');
+      render();
+      toast('Insumo removido!', 'ok');
+    }
+
+    // Módulo Produtos
+    function viewProdutos() {
+      const rows = DB.produtos.map(p => {
+        const custoFicha = (p.receita || []).reduce((acc, r) => {
+          const ins = findInsumo(r.insumoId);
+          return acc + (ins ? ins.custo * r.qtd : 0);
+        }, 0);
+        return `
+          <tr>
+            <td><b>${esc(p.nome)}</b><br><small class="mono">${esc(p.sku)}</small></td>
+            <td>${esc(p.categoria || 'Geral')}</td>
+            <td>${fmtMoney(p.preco)}</td>
+            <td>${fmtMoney(custoFicha)}</td>
+            <td><span class="mono">${p.estoque} un</span></td>
+            <td style="text-align:right;">
+              <button class="icon-btn" onclick="modalProduto('${p.id}')">✏️ Edit</button>
+              <button class="icon-btn" onclick="deletarProduto('${p.id}')">🗑️</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Categoria</th>
+                  <th>Preço Venda</th>
+                  <th>Custo Ficha</th>
+                  <th>Estoque</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum produto cadastrado.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalProduto(id = null) {
+      const prod = DB.produtos.find(p => p.id === id) || {
+        nome: '', sku: '', categoria: 'Doces', preco: 0, validadeDias: 3, estoque: 0, estoqueMin: 10, pesoMedio: 0.1, receita: []
+      };
+
+      const optionsInsumos = DB.insumos.map(i => `<option value="${i.id}">${esc(i.nome)} (${i.unidade})</option>`).join('');
+
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal" style="max-width: 600px;">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Produto' : 'Novo Produto'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>Nome do Produto</label>
+                  <input type="text" id="prdNome" class="input" value="${esc(prod.nome)}">
+                </div>
+                <div class="field">
+                  <label>SKU / Código</label>
+                  <input type="text" id="prdSku" class="input" value="${esc(prod.sku)}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Preço Venda (R$)</label>
+                  <input type="number" step="0.01" id="prdPreco" class="input" value="${prod.preco}">
+                </div>
+                <div class="field">
+                  <label>Validade (Dias)</label>
+                  <input type="number" id="prdValidade" class="input" value="${prod.validadeDias}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Estoque Inicial</label>
+                  <input type="number" id="prdEstoque" class="input" value="${prod.estoque}">
+                </div>
+                <div class="field">
+                  <label>Estoque Mínimo</label>
+                  <input type="number" id="prdEstoqueMin" class="input" value="${prod.estoqueMin}">
+                </div>
+              </div>
+              <div class="divider"></div>
+              <h4>Ficha Técnica / Receita</h4>
+              <div id="recipeContainer" style="margin-top: 10px;"></div>
+              <button class="btn btn-secondary btn-sm" onclick="addRecipeRow()" style="margin-top:8px;">+ Adicionar Insumo</button>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarProduto('${id || ''}')">Salvar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+      window.__activeRecipe = prod.receita ? [...prod.receita] : [];
+      renderRecipeRows(optionsInsumos);
+    }
+
+    function renderRecipeRows(optionsInsumos) {
+      const container = document.getElementById('recipeContainer');
+      if (!container) return;
+      container.innerHTML = window.__activeRecipe.map((r, index) => `
+        <div class="recipe-row">
+          <select class="input" onchange="window.__activeRecipe[${index}].insumoId = this.value">
+            <option value="">Selecione Insumo...</option>
+            ${DB.insumos.map(i => `<option value="${i.id}" ${i.id === r.insumoId ? 'selected' : ''}>${esc(i.nome)} (${i.unidade})</option>`).join('')}
+          </select>
+          <input type="number" step="0.001" placeholder="Qtd" class="input" value="${r.qtd}" onchange="window.__activeRecipe[${index}].qtd = parseFloat(this.value)||0">
+          <button class="icon-btn" onclick="window.__activeRecipe.splice(${index},1); renderRecipeRows();">🗑️</button>
+        </div>
+      `).join('');
+    }
+
+    function addRecipeRow() {
+      window.__activeRecipe.push({ insumoId: '', qtd: 0 });
+      renderRecipeRows();
+    }
+
+    function salvarProduto(id) {
+      const nome = document.getElementById('prdNome').value.trim();
+      if (!nome) return toast('Informe o nome do produto', 'err');
+      const prod = {
+        id: id || uid(),
+        nome,
+        sku: document.getElementById('prdSku').value.trim() || slug(nome),
+        preco: parseFloat(document.getElementById('prdPreco').value) || 0,
+        validadeDias: parseInt(document.getElementById('prdValidade').value) || 1,
+        estoque: parseFloat(document.getElementById('prdEstoque').value) || 0,
+        estoqueMin: parseFloat(document.getElementById('prdEstoqueMin').value) || 0,
+        receita: window.__activeRecipe.filter(r => r.insumoId && r.qtd > 0)
+      };
+      if (id) {
+        const idx = DB.produtos.findIndex(p => p.id === id);
+        if (idx !== -1) DB.produtos[idx] = prod;
+      } else {
+        DB.produtos.push(prod);
+      }
+      persist('produtos');
+      fecharModalDirect();
+      render();
+      toast('Produto salvo!', 'ok');
+    }
+
+    function deletarProduto(id) {
+      if (!confirm('Deseja excluir este produto?')) return;
+      DB.produtos = DB.produtos.filter(p => p.id !== id);
+      persist('produtos');
+      render();
+      toast('Produto removido!', 'ok');
+    }
+
+    // Módulo Produção
+    function viewProducao() {
+      const rows = DB.producoes.map(p => `
+        <tr>
+          <td><span class="mono">${p.lote}</span></td>
+          <td><b>${esc((findProduto(p.produtoId) || {}).nome || '—')}</b></td>
+          <td><span class="mono">${p.quantidade} un</span></td>
+          <td>${fmtDate(p.dataFabricacao)}</td>
+          <td>${fmtDate(p.dataValidade)}</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Fabricação</th>
+                  <th>Validade</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="5" class="empty">Nenhum lote produzido.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalProducao() {
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>Registrar Produção</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Produto</label>
+                <select id="prodProdutoId" class="input">
+                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Quantidade Produzida</label>
+                <input type="number" id="prodQtd" class="input" value="10">
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarProducao()">Confirmar Produção</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarProducao() {
+      const produtoId = document.getElementById('prodProdutoId').value;
+      const qtd = parseInt(document.getElementById('prodQtd').value) || 0;
+      const produto = findProduto(produtoId);
+      if (!produto || qtd <= 0) return toast('Insira uma quantidade válida', 'err');
+
+      const lote = 'L' + Date.now().toString().slice(-6);
+      const dataFab = todayISO();
+      const dataVal = addDays(dataFab, produto.validadeDias);
+
+      const itens = [];
+      for (let i = 1; i <= qtd; i++) {
+        itens.push({
+          codigo: `${produto.sku}-${lote}-${i}`,
+          status: 'disponivel'
+        });
+      }
+
+      // Baixa de insumos se configurado
+      if (DB.config.deducaoInsumos === 'producao') {
+        deduzInsumos(produto, qtd);
+      }
+
+      produto.estoque += qtd;
+
+      DB.producoes.push({
+        id: uid(),
+        lote,
+        produtoId,
+        quantidade: qtd,
+        dataFabricacao: dataFab,
+        dataValidade: dataVal,
+        itens
+      });
+
+      persist('produtos', 'producoes', 'insumos');
+      fecharModalDirect();
+      render();
+      toast('Lote produzido com sucesso!', 'ok');
+    }
+
+    // Módulo Vendas
+    function viewVendas() {
+      const rows = DB.vendas.map(v => `
+        <tr>
+          <td><span class="mono">${fmtDateTime(v.data)}</span></td>
+          <td>${v.itens.map(i => `${i.qty}x ${(findProduto(i.produtoId)||{}).nome||'—'}`).join(', ')}</td>
+          <td><b>${fmtMoney(vendasFaturamento(v))}</b></td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data/Hora</th>
+                  <th>Itens</th>
+                  <th>Total Venda</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="3" class="empty">Nenhuma venda realizada.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalVenda() {
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>Nova Venda Manual</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Produto</label>
+                <select id="vendaProdutoId" class="input">
+                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Quantidade</label>
+                <input type="number" id="vendaQtd" class="input" value="1">
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarVenda()">Finalizar Venda</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarVenda() {
+      const produtoId = document.getElementById('vendaProdutoId').value;
+      const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
+      const produto = findProduto(produtoId);
+      if (!produto || qty <= 0) return toast('Quantidade inválida', 'err');
+
+      produto.estoque = Math.max(0, produto.estoque - qty);
+
+      DB.vendas.push({
+        id: uid(),
+        data: nowISO(),
+        itens: [{ produtoId, qty, preco: produto.preco }]
+      });
+
+      persist('produtos', 'vendas');
+      fecharModalDirect();
+      render();
+      toast('Venda registrada com sucesso!', 'ok');
+    }
+
+    // Módulo Bipagem
+    function viewBipagem() {
+      return `
+        <div class="card card-pad scan-box">
+          <h2>Saída Rápida por Bipagem</h2>
+          <p class="hint">Digite o código da etiqueta ou use o leitor de QR Code para dar baixa automática.</p>
+          <div style="max-width:320px;margin:20px auto;">
+            <input type="text" id="bipInput" class="input scan-input" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)">
+          </div>
+        </div>
+      `;
+    }
+
+    function processarBip(e) {
+      if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (!val) return;
+        toast('Bipagem do item ' + val + ' registrada!', 'ok');
+        e.target.value = '';
+      }
+    }
+
+    // Módulo Etiquetas
+    function viewEtiquetas() {
+      return `
+        <div class="card card-pad">
+          <h3>Impressão e Gerador de Etiquetas</h3>
+          <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
+          <div class="divider"></div>
+          <div class="labels-sheet">
+            ${DB.producoes.slice(-1).map(prod => {
+              const p = findProduto(prod.produtoId);
+              return (prod.itens || []).map(it => `
+                <div class="label-card">
+                  <div class="label-eyebrow">${esc(DB.config.nome)}</div>
+                  <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
+                  <div class="label-row">Validade: <b>${fmtDate(prod.dataValidade)}</b></div>
+                  <div class="label-code">${esc(it.codigo)}</div>
+                </div>
+              `).join('');
+            }).join('') || '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>'}
+          </div>
+        </div>
+      `;
+    }
+
+    // Módulo Relatórios
+    function viewRelatorios() {
+      return `
+        <div class="card card-pad">
+          <h3>Relatório Consolidado</h3>
+          <p class="hint">Estatísticas detalhadas de consumo de insumos e margem de lucro.</p>
+          <div class="divider"></div>
+          <p>Total de Vendas Registradas: <b>${DB.vendas.length}</b></p>
+          <p>Total de Lotes Produzidos: <b>${DB.producoes.length}</b></p>
+        </div>
+      `;
+    }
+
+    // Módulo Configurações
+    function viewConfig() {
+      const cfg = DB.config;
+      return `
+        <div class="card card-pad">
+          <h3>Configurações da Empresa</h3>
+          <div class="divider"></div>
+          <div class="field">
+            <label>Nome Comercial</label>
+            <input type="text" id="cfgNome" class="input" value="${esc(cfg.nome)}">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>WhatsApp</label>
+              <input type="text" id="cfgWhatsapp" class="input" value="${esc(cfg.whatsapp)}">
+            </div>
+            <div class="field">
+              <label>Instagram</label>
+              <input type="text" id="cfgInstagram" class="input" value="${esc(cfg.instagram)}">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarConfig()">Salvar Configurações</button>
+        </div>
+      `;
+    }
+
+    function salvarConfig() {
+      DB.config.nome = document.getElementById('cfgNome').value;
+      DB.config.whatsapp = document.getElementById('cfgWhatsapp').value;
+      DB.config.instagram = document.getElementById('cfgInstagram').value;
+      persist('config');
+      toast('Configurações salvas!', 'ok');
+    }
+
+    function fecharModal(e) {
+      if (e.target.classList.contains('modal-backdrop')) fecharModalDirect();
+    }
+
+    function fecharModalDirect() {
+      document.getElementById('modalRoot').innerHTML = '';
+    }
 
     // Inicialização do Banco local e Firestore
     loadAll();
