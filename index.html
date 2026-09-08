@@ -1267,8 +1267,8 @@ let DB = {
         nome: 'Palha Italiana Tradicional',
         sku: 'PLH-TRAD',
         categoria: 'Doces',
-        preco: 8.00,
-        validadeDias: 3,
+        preco: 6.00,
+        validadeDias: 15,
         estoque: 0,
         estoqueMin: 10,
         pesoMedio: 0.15,
@@ -1310,7 +1310,7 @@ let DB = {
       DB.config = await loadKey('config', defaultConfig());
       DB.insumos = await loadKey('insumos', seeded.insumos);
       DB.produtos = await loadKey('produtos', seeded.produtos);
-      DB.producoes = await loadKey('producoes', []);
+      DB.producoes = await loadKey('producao', []);
       DB.vendas = await loadKey('vendas', []);
       DB.scanlog = await loadKey('scanlog', []);
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
