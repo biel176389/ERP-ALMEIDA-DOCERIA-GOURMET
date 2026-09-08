@@ -20,7 +20,7 @@
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 const firebaseConfig = {
 apiKey: "AIzaSyCItji6rUERsaVtv2mbTXkAoY3GYxzOqOs",
@@ -34,6 +34,19 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const rtdb = getDatabase(app);
+
+window.salvarDadosNoFirebase = async function (dados) {
+  const colecao = 'erp_data';
+  const chaves = ['config', 'insumos', 'produtos', 'producoes', 'vendas', 'scanlog', 'etiquetaLayout'];
+  await Promise.all(chaves.map(async (chave) => {
+    await setDoc(doc(db, colecao, chave), {
+      dados: dados[chave] ?? null,
+      atualizadoEm: serverTimestamp()
+    }, { merge: true });
+  }));
+};
+
+window.firebasePronto = true;
 console.log("Firebase inicializado com sucesso!");
 </script>
 <style>
@@ -2764,7 +2777,31 @@ console.log("Firebase inicializado com sucesso!");
        EVENT BINDING
        ============================================================ */
     function afterRender() {
-      if (ROUTE === 'dashboard') { renderDashCharts(); }
+      if (ROUTE === 'dashboard') {
+        renderDashCharts();
+        const btnSalvar = document.getElementById('btnSalvarInformacoes');
+        if (btnSalvar) {
+          btnSalvar.onclick = async () => {
+            const original = btnSalvar.innerHTML;
+            btnSalvar.disabled = true;
+            btnSalvar.innerHTML = '⏳ Salvando...';
+            try {
+              await Promise.all(STORE_KEYS.map(k => saveKey(k, DB[k])));
+              if (typeof window.salvarDadosNoFirebase !== 'function') {
+                throw new Error('Firebase ainda não foi carregado. Tente novamente.');
+              }
+              await window.salvarDadosNoFirebase(DB);
+              toast('Informações salvas no banco de dados com sucesso!', 'ok');
+            } catch (e) {
+              console.error('Erro ao salvar no Firebase:', e);
+              toast('Não foi possível salvar no banco de dados: ' + (e.message || e), 'err');
+            } finally {
+              btnSalvar.disabled = false;
+              btnSalvar.innerHTML = original;
+            }
+          };
+        }
+      }
 
       if (ROUTE === 'estoque') {
         const add = document.getElementById('btnAddInsumo');
@@ -3003,23 +3040,6 @@ console.log("Firebase inicializado com sucesso!");
           toast('Configurações salvas', 'ok');
           render();
         };
-        
-        // Exportar JSON
-        const btnExport = document.getElementById('btnExportJson');
-        if (btnExport) {
-          btnExport.onclick = exportAllData;
-        }
-        
-        // Importar JSON
-        const fileInput = document.getElementById('fileInput');
-        if (fileInput) {
-          fileInput.onchange = (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              importAllData(e.target.files[0]);
-              fileInput.value = ''; // Limpa o input
-            }
-          };
-        }
       }
     }
 
