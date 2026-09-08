@@ -1216,7 +1216,15 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
 
     /* ---------------- storage (Compatível com iPhone e iOS Safari) ---------------- */
     const STORE_KEYS = ['config', 'insumos', 'produtos', 'producoes', 'vendas', 'scanlog', 'etiquetaLayout'];
-    let DB = { config: null, insumos: null, produtos: null, producoes: null, vendas: null, scanlog: null, etiquetaLayout: null };
+let DB = {
+  config: {},
+  insumos: [],
+  produtos: [],
+  producoes: [],
+  vendas: [],
+  scanlog: [],
+  etiquetaLayout: {}
+};
 
     function defaultEtiquetaLayout() {
       return {
