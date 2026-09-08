@@ -1142,30 +1142,6 @@ console.log("Firebase inicializado com sucesso!");
     font-weight: 600;
   }
 
-  /* Estilos para import/export */
-  .backup-section {
-    background: var(--gold-light);
-    border: 1px solid var(--gold);
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-
-  .backup-section h4 {
-    font-size: 14px;
-    margin-bottom: 8px;
-    color: var(--wine-dark);
-  }
-
-  .backup-section .hint {
-    margin-bottom: 12px;
-  }
-
-  .file-input-wrapper {
-    position: relative;
-    overflow: hidden;
-    display: inline-block;
-  }
 
   .file-input-wrapper input[type=file] {
     position: absolute;
@@ -1177,6 +1153,15 @@ console.log("Firebase inicializado com sucesso!");
     cursor: pointer;
   }
 </style>
+
+<style>
+.btn-salvar-info {
+  padding: 7px 11px !important;
+  font-size: 13px !important;
+  min-height: 34px;
+}
+</style>
+
 </head>
 <body>
   <div id="app">
@@ -1436,6 +1421,9 @@ console.log("Firebase inicializado com sucesso!");
       const c = document.getElementById('content');
       const actions = document.getElementById('topbarActions');
       actions.innerHTML = '';
+      if (ROUTE === 'dashboard') {
+        actions.innerHTML = `<button class="btn btn-primary" id="btnSalvarInformacoes">💾 Salvar informações</button>`;
+      }
       if (ROUTE === 'dashboard') c.innerHTML = viewDashboard();
       else if (ROUTE === 'estoque') c.innerHTML = viewEstoque();
       else if (ROUTE === 'produtos') c.innerHTML = viewProdutos();
@@ -2645,7 +2633,7 @@ console.log("Firebase inicializado com sucesso!");
     }
 
     /* ============================================================
-       CONFIGURAÇÕES - COM EXPORT/IMPORT JSON
+       CONFIGURAÇÕES
        ============================================================ */
     function viewConfig() {
       const c = DB.config;
@@ -2668,37 +2656,11 @@ console.log("Firebase inicializado com sucesso!");
         </div>
         <button class="btn btn-primary" id="btnSalvarConfig" style="margin-top:8px;">Salvar</button>
         
-        <div class="divider"></div>
-        
-        <h3 style="font-size:15px;margin-bottom:14px;color:var(--wine-dark);">📦 Backup e Sincronização</h3>
-        
-        <div class="backup-section">
-          <h4>📤 Exportar todos os dados</h4>
-          <div class="hint">Baixe um arquivo com todos os dados (insumos, produtos, vendas, etc.) para fazer backup ou transferir para outro dispositivo.</div>
-          <button class="btn btn-gold" id="btnExportJson" style="margin-top:8px;width:100%;justify-content:center;">
-            📥 Exportar JSON
-          </button>
-        </div>
-        
-        <div class="backup-section">
-          <h4>📥 Importar dados</h4>
-          <div class="hint">Restaura todos os dados a partir de um arquivo JSON exportado anteriormente. <strong>⚠ Atenção:</strong> Isso substituirá todos os dados atuais!</div>
-          <div class="file-input-wrapper" style="margin-top:8px;width:100%;">
-            <button class="btn btn-primary" style="width:100%;justify-content:center;cursor:pointer;">
-              📤 Selecionar arquivo JSON
-            </button>
-            <input type="file" id="fileInput" accept=".json">
-          </div>
-        </div>
-        
-        <div class="hint" style="margin-top:8px;font-size:11px;color:var(--muted);">
-          💡 Use a exportação para fazer backups periódicos ou para transferir dados entre dispositivos (iPhone, Notebook, etc.)
-        </div>
       </div>`;
     }
 
     /* ============================================================
-       FUNÇÕES DE EXPORT/IMPORT JSON
+       FUNÇÕES DE EXPORT/IMPORT JSON (mantidas para compatibilidade)
        ============================================================ */
     function exportAllData() {
       try {
