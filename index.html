@@ -64,7 +64,7 @@ window.fazerLogout = async () => {
 };
 
 // Monitorar Estado de Autenticação
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   const loginScreen = document.getElementById('loginScreen');
   const appScreen = document.getElementById('app');
 
@@ -73,6 +73,10 @@ onAuthStateChanged(auth, (user) => {
     if (appScreen) appScreen.style.display = 'flex';
     const userEmailEl = document.getElementById('currentUserEmail');
     if (userEmailEl) userEmailEl.textContent = user.email || 'Usuário Autenticado';
+    
+    if (window.loadAll) {
+      await window.loadAll();
+    }
     if (window.render) window.render();
   } else {
     if (appScreen) appScreen.style.display = 'none';
@@ -230,7 +234,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
 
   /* ---------- Layout Shell ---------- */
   #app {
-    display: none; /* Exibido após login */
+    display: none;
     min-height: 100dvh;
   }
 
@@ -1310,7 +1314,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       }
     }
 
-    async function loadAll() {
+    window.loadAll = async function() {
       const seeded = seedData();
       DB.config = await loadKey('config', defaultConfig());
       DB.insumos = await loadKey('insumos', seeded.insumos);
@@ -1319,7 +1323,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       DB.vendas = await loadKey('vendas', []);
       DB.scanlog = await loadKey('scanlog', []);
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
-    }
+    };
 
     function persist(...keys) { 
       keys.forEach(k => saveKey(k, DB[k])); 
@@ -2163,9 +2167,6 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     function fecharModalDirect() {
       document.getElementById('modalRoot').innerHTML = '';
     }
-
-    // Inicialização do Banco local e Firestore
-    loadAll();
   </script>
 </body>
 </html>
