@@ -1176,7 +1176,12 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
           toast('Conta criada com sucesso!', 'ok');
         }
       } catch (err) {
-        toast('Erro de autenticação: ' + err.message, 'err');
+        if (modoAuth === 'entrar' && (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found')) {
+          toast('Conta não cadastrada. Mudei para a aba "Criar Conta"!', 'err');
+          alternarAbaLogin('cadastrar');
+        } else {
+          toast('Erro de autenticação: ' + err.message, 'err');
+        }
       }
     }
 
@@ -1216,15 +1221,15 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
 
     /* ---------------- storage (Compatível com iPhone e iOS Safari) ---------------- */
     const STORE_KEYS = ['config', 'insumos', 'produtos', 'producoes', 'vendas', 'scanlog', 'etiquetaLayout'];
-let DB = {
-  config: {},
-  insumos: [],
-  produtos: [],
-  producoes: [],
-  vendas: [],
-  scanlog: [],
-  etiquetaLayout: {}
-};
+    let DB = {
+      config: {},
+      insumos: [],
+      produtos: [],
+      producoes: [],
+      vendas: [],
+      scanlog: [],
+      etiquetaLayout: {}
+    };
 
     function defaultEtiquetaLayout() {
       return {
@@ -1829,11 +1834,15 @@ let DB = {
     function viewProducao() {
       const rows = DB.producoes.map(p => `
         <tr>
-          <td><span class="mono">${p.lote}</span></td>
+          <td><span class="mono">${esc(p.lote)}</span></td>
           <td><b>${esc((findProduto(p.produtoId) || {}).nome || '—')}</b></td>
           <td><span class="mono">${p.quantidade} un</span></td>
           <td>${fmtDate(p.dataFabricacao)}</td>
           <td>${fmtDate(p.dataValidade)}</td>
+          <td style="text-align:right;">
+            <button class="icon-btn" onclick="modalProducao('${p.id}')">✏️ Edit</button>
+            <button class="icon-btn" onclick="deletarProducao('${p.id}')">🗑️</button>
+          </td>
         </tr>
       `).join('');
 
@@ -1848,10 +1857,11 @@ let DB = {
                   <th>Quantidade</th>
                   <th>Fabricação</th>
                   <th>Validade</th>
+                  <th style="text-align:right;">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows.length ? rows : '<tr><td colspan="5" class="empty">Nenhum lote produzido.</td></tr>'}
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum lote produzido.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -1859,29 +1869,46 @@ let DB = {
       `;
     }
 
-    function modalProducao() {
+    function modalProducao(id = null) {
+      const prod = DB.producoes.find(p => p.id === id) || {
+        produtoId: DB.produtos[0]?.id || '',
+        quantidade: 10,
+        dataFabricacao: todayISO(),
+        dataValidade: ''
+      };
+
       const content = `
         <div class="modal-backdrop" onclick="fecharModal(event)">
           <div class="modal">
             <div class="modal-head">
-              <h3>Registrar Produção</h3>
+              <h3>${id ? 'Editar Produção' : 'Registrar Produção'}</h3>
               <button class="modal-close" onclick="fecharModalDirect()">×</button>
             </div>
             <div class="modal-body">
               <div class="field">
                 <label>Produto</label>
                 <select id="prodProdutoId" class="input">
-                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}
+                  ${DB.produtos.map(p => `<option value="${p.id}" ${p.id === prod.produtoId ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
                 </select>
               </div>
               <div class="field">
                 <label>Quantidade Produzida</label>
-                <input type="number" id="prodQtd" class="input" value="10">
+                <input type="number" id="prodQtd" class="input" value="${prod.quantidade}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Data Fabricação</label>
+                  <input type="date" id="prodDataFab" class="input" value="${prod.dataFabricacao || todayISO()}">
+                </div>
+                <div class="field">
+                  <label>Data Validade</label>
+                  <input type="date" id="prodDataVal" class="input" value="${prod.dataValidade || ''}">
+                </div>
               </div>
             </div>
             <div class="modal-foot">
               <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
-              <button class="btn btn-primary" onclick="salvarProducao()">Confirmar Produção</button>
+              <button class="btn btn-primary" onclick="salvarProducao('${id || ''}')">Confirmar Produção</button>
             </div>
           </div>
         </div>
@@ -1889,45 +1916,71 @@ let DB = {
       document.getElementById('modalRoot').innerHTML = content;
     }
 
-    function salvarProducao() {
+    function salvarProducao(id = '') {
       const produtoId = document.getElementById('prodProdutoId').value;
       const qtd = parseInt(document.getElementById('prodQtd').value) || 0;
+      const dataFab = document.getElementById('prodDataFab').value || todayISO();
       const produto = findProduto(produtoId);
       if (!produto || qtd <= 0) return toast('Insira uma quantidade válida', 'err');
 
-      const lote = 'L' + Date.now().toString().slice(-6);
-      const dataFab = todayISO();
-      const dataVal = addDays(dataFab, produto.validadeDias);
+      const dataVal = document.getElementById('prodDataVal').value || addDays(dataFab, produto.validadeDias);
 
-      const itens = [];
-      for (let i = 1; i <= qtd; i++) {
-        itens.push({
-          codigo: `${produto.sku}-${lote}-${i}`,
-          status: 'disponivel'
+      if (id) {
+        const prod = DB.producoes.find(p => p.id === id);
+        if (prod) {
+          const diff = qtd - prod.quantidade;
+          prod.quantidade = qtd;
+          prod.produtoId = produtoId;
+          prod.dataFabricacao = dataFab;
+          prod.dataValidade = dataVal;
+          produto.estoque = Math.max(0, produto.estoque + diff);
+        }
+      } else {
+        const lote = 'L' + Date.now().toString().slice(-6);
+        const itens = [];
+        for (let i = 1; i <= qtd; i++) {
+          itens.push({
+            codigo: `${produto.sku}-${lote}-${i}`,
+            status: 'disponivel'
+          });
+        }
+
+        if (DB.config.deducaoInsumos === 'producao') {
+          deduzInsumos(produto, qtd);
+        }
+
+        produto.estoque += qtd;
+
+        DB.producoes.push({
+          id: uid(),
+          lote,
+          produtoId,
+          quantidade: qtd,
+          dataFabricacao: dataFab,
+          dataValidade: dataVal,
+          itens
         });
       }
-
-      // Baixa de insumos se configurado
-      if (DB.config.deducaoInsumos === 'producao') {
-        deduzInsumos(produto, qtd);
-      }
-
-      produto.estoque += qtd;
-
-      DB.producoes.push({
-        id: uid(),
-        lote,
-        produtoId,
-        quantidade: qtd,
-        dataFabricacao: dataFab,
-        dataValidade: dataVal,
-        itens
-      });
 
       persist('produtos', 'producoes', 'insumos');
       fecharModalDirect();
       render();
-      toast('Lote produzido com sucesso!', 'ok');
+      toast(id ? 'Produção atualizada com sucesso!' : 'Lote produzido com sucesso!', 'ok');
+    }
+
+    function deletarProducao(id) {
+      if (!confirm('Deseja excluir este registro de produção?')) return;
+      const prod = DB.producoes.find(p => p.id === id);
+      if (prod) {
+        const produto = findProduto(prod.produtoId);
+        if (produto) {
+          produto.estoque = Math.max(0, produto.estoque - prod.quantidade);
+        }
+      }
+      DB.producoes = DB.producoes.filter(p => p.id !== id);
+      persist('produtos', 'producoes');
+      render();
+      toast('Registro de produção removido!', 'ok');
     }
 
     // Módulo Vendas
