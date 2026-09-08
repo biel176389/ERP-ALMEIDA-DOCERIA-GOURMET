@@ -82,7 +82,7 @@ onAuthStateChanged(auth, (user) => {
 
 window.salvarDadosNoFirebase = async function (dados) {
   const colecao = 'erp_data';
-  const chaves = ['config', 'insumos', 'produtos', 'producoes', 'vendas', 'scanlog', 'etiquetaLayout'];
+  const chaves = ['config', 'insumos', 'produtos', 'producao', 'vendas', 'scanlog', 'etiquetaLayout'];
   await Promise.all(chaves.map(async (chave) => {
     await setDoc(doc(db, colecao, chave), {
       dados: dados[chave] ?? null,
