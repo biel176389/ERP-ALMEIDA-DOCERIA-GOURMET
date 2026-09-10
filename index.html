@@ -1286,18 +1286,31 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         textoContatoTitulo: 'Atendimento / Vendas',
       };
     }
+function defaultConfig() {
+  const baseConfig = {
+    nome: 'Almeida Doce Gourmet',
+    whatsapp: '(32) 98448-1635',
+    instagram: 'almeidadocergourmet',
+    origem: 'Miraí - MG',
+    cuidados: 'Manter em local fresco, seco e ao abrigo da luz solar.\nApós aberto, consumir em até 3 dias.\nEvitar armazenar próximo a produtos com cheiro forte.',
+    deducaoInsumos: 'producao'
+  };
 
-    function defaultConfig() {
-      return {
-        nome: 'Almeida Doce Gourmet',
-        whatsapp: '(32) 98448-1635',
-        instagram: 'almeidadocergourmet',
-        origem: 'Miraí - MG',
-        cuidados: 'Manter em local fresco, seco e ao abrigo da luz solar.\nApós aberto, consumir em até 3 dias.\nEvitar armazenar próximo a produtos com cheiro forte.',
-        deducaoInsumos: 'producao'
-      };
-    }
+  return {
+    ...baseConfig,
+    conteudoEtiqueta: `
+${baseConfig.nome.toUpperCase()}
+Origem: ${baseConfig.origem}
 
+Contato:
+• WhatsApp: ${baseConfig.whatsapp}
+• Instagram: @${baseConfig.instagram}
+
+CUIDADOS E CONSERVAÇÃO:
+${baseConfig.cuidados}
+`.trim()
+  };
+}
     function seedData() {
       const leite = { id: uid(), nome: 'Leite Condensado', unidade: 'un', estoque: 24, estoqueMin: 6, custo: 5.20 };
       const choc = { id: uid(), nome: 'Chocolate em Pó', unidade: 'kg', estoque: 3.5, estoqueMin: 1, custo: 24.00 };
