@@ -1,0 +1,2526 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Doce Gestão">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#5C3A26">
+<title>Almeida Doceria Gourmet · Sistema de Gestão ERP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCItji6rUERsaVtv2mbTXkAoY3GYxzOqOs",
+  authDomain: "erp-doceria-almeida.firebaseapp.com",
+  projectId: "erp-doceria-almeida",
+  storageBucket: "erp-doceria-almeida.firebasestorage.app",
+  messagingSenderId: "681128555274",
+  appId: "1:681128555274:web:de374ea428bc135c4480f3"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const rtdb = getDatabase(app);
+
+window.firebaseAuth = auth;
+
+// Funções globais de Autenticação
+window.fazerLogin = async (email, senha) => {
+  return await signInWithEmailAndPassword(auth, email, senha);
+};
+
+window.fazerCadastro = async (email, senha) => {
+  return await createUserWithEmailAndPassword(auth, email, senha);
+};
+
+window.fazerLoginGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  return await signInWithPopup(auth, provider);
+};
+
+window.fazerLogout = async () => {
+  return await signOut(auth);
+};
+
+// Monitorar Estado de Autenticação
+onAuthStateChanged(auth, async (user) => {
+  const loginScreen = document.getElementById('loginScreen');
+  const appScreen = document.getElementById('app');
+
+  if (user) {
+    if (loginScreen) loginScreen.style.display = 'none';
+    if (appScreen) appScreen.style.display = 'flex';
+    const userEmailEl = document.getElementById('currentUserEmail');
+    if (userEmailEl) userEmailEl.textContent = user.email || 'Usuário Autenticado';
+    
+    if (window.loadAll) {
+      await window.loadAll();
+    }
+    if (window.render) window.render();
+  } else {
+    if (appScreen) appScreen.style.display = 'none';
+    if (loginScreen) loginScreen.style.display = 'flex';
+  }
+});
+
+window.salvarDadosNoFirebase = async function (dados) {
+  const colecao = 'erp_data';
+  const chaves = ['config', 'insumos', 'produtos', 'producao', 'vendas', 'scanlog', 'etiquetaLayout'];
+  await Promise.all(chaves.map(async (chave) => {
+    await setDoc(doc(db, colecao, chave), {
+      dados: dados[chave] ?? null,
+      atualizadoEm: serverTimestamp()
+    }, { merge: true });
+  }));
+};
+
+window.firebasePronto = true;
+console.log("Firebase e Autenticação inicializados com sucesso!");
+</script>
+<style>
+  :root {
+    --bg: #FDF8F3;
+    --surface: #FFFFFF;
+    --surface-2: #F5EDE3;
+    --ink: #3A2A24;
+    --muted: #8C7A6E;
+    --line: #E4D9CF;
+    --wine: #8B5A3C;
+    --wine-dark: #5C3A26;
+    --wine-light: #EFE3D8;
+    --gold: #C29A6B;
+    --gold-light: #F7EFE2;
+    --green: #5E8C6D;
+    --green-light: #EAF3EC;
+    --red: #B25E4A;
+    --red-light: #F6EAE5;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 2px rgba(58, 42, 36, .04), 0 6px 20px rgba(58, 42, 36, .06);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100dvh;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ink);
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  a { color: inherit; }
+  button { font-family: inherit; }
+  ::selection { background: var(--wine-light); }
+
+  /* ---------- Login Screen ---------- */
+  #loginScreen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 20px;
+    background: linear-gradient(135deg, var(--wine-dark) 0%, var(--wine) 100%);
+  }
+
+  .login-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+    text-align: center;
+  }
+
+  .login-card .brand-title {
+    color: var(--wine-dark);
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  .login-card .brand-sub {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 24px;
+  }
+
+  .login-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .login-tab {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
+  .login-tab.active {
+    background: #fff;
+    color: var(--wine-dark);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .login-btn-google {
+    width: 100%;
+    background: #fff;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 10px;
+    border-radius: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .login-btn-google:hover {
+    background: var(--surface-2);
+  }
+
+  /* ---------- Layout Shell ---------- */
+  #app {
+    display: none;
+    min-height: 100dvh;
+  }
+
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--wine-dark);
+    color: #F5EDE3;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+
+  .brand {
+    padding: 0 20px 18px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+    margin-bottom: 10px;
+  }
+
+  .brand-title {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .brand-sub {
+    font-size: 10.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: #D4C0B2;
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 10px;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: #D4C0B2;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    transition: background .12s;
+  }
+
+  .nav-item svg {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    opacity: .85;
+  }
+
+  .nav-item:hover {
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+  }
+
+  .nav-item.active {
+    background: #fff;
+    color: var(--wine-dark);
+  }
+
+  .nav-item.active svg { opacity: 1; }
+
+  .nav-foot {
+    padding: 12px 20px 4px 20px;
+    font-size: 10.5px;
+    color: #B8A294;
+    font-family: 'IBM Plex Mono', monospace;
+    border-top: 1px solid rgba(255, 255, 255, .12);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .btn-logout {
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .btn-logout:hover {
+    background: rgba(255, 255, 255, .2);
+  }
+
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding-top: max(18px, env(safe-area-inset-top));
+  }
+
+  .topbar h1 { font-size: 22px; }
+
+  .topbar .sub {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
+
+  .content {
+    padding: 24px 28px 60px 28px;
+    max-width: 1180px;
+    width: 100%;
+  }
+
+  .mobile-nav { display: none; }
+
+  @media (max-width:880px) {
+    .sidebar { display: none; }
+    #app { flex-direction: column; }
+    .mobile-nav {
+      display: flex;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity;
+      gap: 4px;
+      background: var(--wine-dark);
+      padding: 8px 10px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      padding-top: max(8px, env(safe-area-inset-top));
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+    }
+    .mobile-nav::-webkit-scrollbar { display: none; }
+    .mobile-nav button {
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      color: #D4C0B2;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 10px 13px;
+      min-height: 40px;
+      border-radius: 9px;
+      font-family: 'Manrope';
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-nav button svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      opacity: .85;
+    }
+    .mobile-nav button.active {
+      background: #fff;
+      color: var(--wine-dark);
+    }
+    .mobile-nav button.active svg { opacity: 1; }
+    .content { padding: 16px 14px 76px 14px; }
+    .topbar {
+      position: static;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px 16px 16px;
+    }
+    .topbar h1 { font-size: 19px; }
+    #topbarActions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #topbarActions:empty { display: none; }
+    #topbarActions .btn {
+      width: 100%;
+      justify-content: center;
+      min-height: 44px;
+    }
+    .input, select, textarea { font-size: 16px !important; }
+    .btn { min-height: 40px; }
+    .btn-sm {
+      min-height: 34px;
+      padding: 7px 12px;
+    }
+    .icon-btn {
+      padding: 10px;
+      min-width: 38px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    td [data-adj], td .icon-btn { margin: 2px; }
+    table { font-size: 13px; }
+    th, td { padding: 10px 9px; }
+    .stat { padding: 14px 15px; }
+    .stat .value { font-size: 21px; }
+    .stat .label { font-size: 10px; }
+    .stat .delta { font-size: 11px; }
+    .modal-backdrop {
+      align-items: flex-end;
+      padding: 0;
+    }
+    .modal {
+      max-width: 100%;
+      width: 100%;
+      max-height: 92vh;
+      border-radius: 18px 18px 0 0;
+      animation: sheetup .18s ease-out;
+    }
+    .modal-foot { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  }
+
+  @keyframes sheetup {
+    from { transform: translateY(24px); opacity: .4; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @media (max-width:480px) {
+    .field-row {
+      flex-direction: column;
+      gap: 0;
+    }
+    .grid-4 { grid-template-columns: 1fr; }
+    .chart-wrap { height: 220px; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .card-pad { padding: 20px; }
+  .grid { display: grid; gap: 16px; }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+  @media (max-width:880px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  .stat { padding: 18px 20px; }
+
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--muted);
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .stat .value {
+    font-family: 'Fraunces', serif;
+    font-size: 28px;
+    margin-top: 6px;
+    color: var(--ink);
+  }
+
+  .stat .delta {
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--muted);
+  }
+
+  .stat .delta.up { color: var(--green); }
+  .stat .delta.down { color: var(--red); }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 28px 0 12px 0;
+  }
+
+  .section-title h2 { font-size: 17px; }
+  .section-title:first-child { margin-top: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+
+  td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .badge-ok { background: var(--green-light); color: var(--green); }
+  .badge-warn { background: var(--gold-light); color: #8a6a1c; }
+  .badge-danger { background: var(--red-light); color: var(--red); }
+  .badge-muted { background: var(--surface-2); color: var(--muted); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 16px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: filter .1s, transform .05s;
+    font-family: 'Manrope';
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--wine); color: #fff; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-secondary { background: var(--surface); border-color: var(--line); color: var(--ink); }
+  .btn-secondary:hover { background: var(--surface-2); }
+  .btn-danger { background: var(--red-light); color: var(--red); }
+  .btn-danger:hover { filter: brightness(.97); }
+  .btn-gold { background: var(--gold); color: #fff; }
+  .btn-sm { padding: 6px 11px; font-size: 12px; border-radius: 7px; }
+  .btn-icon { padding: 7px; border-radius: 8px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 14px;
+    font-family: 'Manrope';
+    color: var(--ink);
+  }
+
+  .input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--wine-light);
+    border-color: var(--wine);
+  }
+
+  label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .field { margin-bottom: 14px; }
+  .field-row { display: flex; gap: 12px; }
+  .field-row>div { flex: 1; }
+
+  .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .empty h3 {
+    color: var(--ink);
+    margin-bottom: 6px;
+    font-size: 16px;
+  }
+
+  .empty p {
+    font-size: 13px;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(58, 42, 36, .45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+    backdrop-filter: blur(2px);
+  }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 16px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 88vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+  }
+
+  .modal-head {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-body { padding: 20px 22px; }
+
+  .modal-foot {
+    padding: 16px 22px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--muted);
+    line-height: 1;
+  }
+
+  .toast-wrap {
+    position: fixed;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    right: 20px;
+    left: 20px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .toast {
+    background: var(--ink);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+    max-width: 380px;
+    margin: 0 auto;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    animation: toastin .18s ease-out;
+    pointer-events: auto;
+  }
+
+  .toast.ok { background: var(--green); }
+  .toast.err { background: var(--red); }
+
+  @keyframes toastin {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .tag-num {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--gold-light);
+    color: #7A5D3A;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--line);
+    margin: 18px 0;
+  }
+
+  .pill-tabs {
+    display: flex;
+    gap: 6px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 10px;
+    width: fit-content;
+    flex-wrap: wrap;
+  }
+
+  .pill-tab {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+
+  .pill-tab.active {
+    background: #fff;
+    color: var(--wine);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 8px;
+    border-radius: 6px;
+  }
+
+  .icon-btn:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .label-card {
+    width: var(--lbl-w, 340px);
+    min-height: var(--lbl-min-h, 0);
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 16px 18px;
+    background: #fff;
+    position: relative;
+    font-family: var(--lbl-font-body, 'Manrope'), system-ui, sans-serif;
+    font-size: var(--lbl-size-body, 0.3cm);
+    break-inside: avoid;
+  }
+
+  .label-eyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .label-name {
+    font-family: var(--lbl-font-title, 'Fraunces'), serif;
+    font-size: var(--lbl-size-title, 0.5cm);
+    font-weight: 700;
+    margin-top: 1px;
+    line-height: 1.15;
+    padding-right: 34px;
+  }
+
+  .label-num {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-family: var(--lbl-font-title, 'Fraunces'), serif;
+    font-weight: 700;
+    font-size: 17px;
+  }
+
+  .label-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 9px;
+    font-size: var(--lbl-size-body, 0.32cm);
+  }
+
+  .label-row b { font-size: calc(var(--lbl-size-body, 0.32cm) + 0.03cm); }
+
+  .label-qr-wrap {
+    position: relative;
+    margin-top: 12px;
+    text-align: right;
+  }
+
+  .label-qr-wrap img {
+    width: var(--lbl-qr-size, 76px);
+    height: var(--lbl-qr-size, 76px);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+
+  .label-code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--lbl-size-code, 0.25cm);
+    margin-top: 3px;
+    color: var(--muted);
+  }
+
+  .label-care {
+    font-size: var(--lbl-size-body, 0.3cm);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
+  .label-care b {
+    display: block;
+    font-size: calc(var(--lbl-size-body, 0.3cm) + 0.015cm);
+    margin-bottom: 3px;
+  }
+
+  .label-contact {
+    font-size: var(--lbl-size-body, 0.3cm);
+    margin-top: 9px;
+    line-height: 1.6;
+  }
+
+  .label-contact b {
+    display: block;
+    font-size: var(--lbl-size-body, 0.3cm);
+    margin-bottom: 2px;
+  }
+
+  .labels-sheet {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  @media print {
+    @page { margin: 8mm; }
+    body * { visibility: hidden; }
+    #labelsSheet, #labelsSheet * { visibility: visible; }
+    #labelsSheet {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .label-card {
+      box-shadow: none;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  }
+
+  body.etq-export-pdf .label-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .scan-box {
+    border: 2px dashed var(--wine-light);
+    border-radius: 16px;
+    padding: 26px;
+    text-align: center;
+    background: var(--wine-light);
+  }
+
+  .scan-input {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 17px;
+    text-align: center;
+    padding: 14px;
+    letter-spacing: .03em;
+  }
+
+  .scan-log-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+  }
+
+  .scan-log-item:last-child { border-bottom: none; }
+
+  .recipe-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    background: var(--surface-2);
+    border-radius: 8px;
+  }
+
+  .recipe-row select { flex: 2; }
+  .recipe-row input { flex: 1; }
+  .recipe-row .icon-btn { flex-shrink: 0; }
+
+  .cart-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .cart-line:last-child { border-bottom: none; }
+  .cart-line .nm { flex: 1; font-weight: 700; font-size: 13px; }
+
+  .cart-line .qtyctl {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .qtyctl button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: #fff;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .help-note {
+    background: var(--gold-light);
+    border: 1px solid #EAD9A8;
+    border-radius: 10px;
+    padding: 11px 14px;
+    font-size: 12.5px;
+    color: #6b5518;
+    margin-bottom: 16px;
+  }
+
+  .help-note b { color: #4d3d10; }
+  .low-stock-row { background: var(--red-light) !important; }
+
+  .chart-wrap {
+    position: relative;
+    height: 260px;
+  }
+
+  .chart-wrap.sm { height: 200px; }
+
+  #saleCameraReader, #cameraReader {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+  }
+
+  #saleCameraReader video, #cameraReader video {
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 12px;
+  }
+
+  #saleCameraReader-box, #cameraReader-box {
+    width: 100% !important;
+    max-width: 400px !important;
+    margin: 0 auto !important;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  #saleCameraReader-box video, #cameraReader-box video {
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 12px;
+  }
+
+  .recipe-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .recipe-header label { margin-bottom: 0; }
+
+  .badge-insumos {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .file-input-wrapper input[type=file] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+  }
+
+  .btn-salvar-info {
+    padding: 7px 11px !important;
+    font-size: 13px !important;
+    min-height: 34px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Tela de Login -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="brand-title">Almeida Doceria</div>
+      <div class="brand-sub">Acesso ao Sistema ERP</div>
+      
+      <div class="login-tabs">
+        <button class="login-tab active" id="tabEntrar" onclick="alternarAbaLogin('entrar')">Entrar</button>
+        <button class="login-tab" id="tabCadastrar" onclick="alternarAbaLogin('cadastrar')">Criar Conta</button>
+      </div>
+
+      <form id="authForm" onsubmit="submeterAuth(event)">
+        <div class="field" style="text-align: left;">
+          <label>E-mail</label>
+          <input type="email" id="authEmail" class="input" placeholder="seu@email.com" required>
+        </div>
+        <div class="field" style="text-align: left;">
+          <label>Senha</label>
+          <div style="position:relative;">
+            <input type="password" id="authSenha" class="input" placeholder="••••••••" required style="padding-right:42px;">
+            <button type="button" class="icon-btn" id="toggleSenhaBtn" onclick="alternarVisibilidadeSenha()" aria-label="Mostrar senha" style="position:absolute;right:3px;top:50%;transform:translateY(-50%);">
+              <svg id="iconOlho" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" id="btnAuthSubmit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 8px;">
+          Entrar
+        </button>
+      </form>
+
+      <div class="divider"></div>
+
+      <button type="button" class="login-btn-google" onclick="submeterGoogle()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        Entrar com Google
+      </button>
+    </div>
+  </div>
+
+  <!-- Tela do Aplicativo (ERP) -->
+  <div id="app">
+    <nav class="sidebar">
+      <div class="brand">
+        <div class="brand-title">Almeida Doceria Gourmet</div>
+        <div class="brand-sub">sistema de gestão ERP</div>
+      </div>
+      <div class="nav" id="nav"></div>
+      <div class="nav-foot">
+        <span id="currentUserEmail">carregando...</span>
+        <button class="btn-logout" onclick="window.fazerLogout()">Sair da Conta</button>
+      </div>
+    </nav>
+    <div class="mobile-nav" id="mobileNav"></div>
+    <div class="main">
+      <div class="topbar">
+        <div>
+          <h1 id="pageTitle">Painel</h1>
+          <div class="sub" id="pageSub"></div>
+        </div>
+        <div id="topbarActions"></div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div class="toast-wrap" id="toastWrap"></div>
+  <div id="print-area" style="display:none;"></div>
+
+  <script>
+    /* ---------------- Auth UI Control ---------------- */
+    let modoAuth = 'entrar';
+
+    function alternarVisibilidadeSenha() {
+      const input = document.getElementById('authSenha');
+      const icon = document.getElementById('iconOlho');
+      if (!input) return;
+      const ficaraVisivel = input.type === 'password';
+      input.type = ficaraVisivel ? 'text' : 'password';
+      if (icon) {
+        icon.innerHTML = ficaraVisivel
+          ? '<path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M9.9 4.24A11 11 0 0 1 12 4c7 0 11 7 11 7a13.3 13.3 0 0 1-3.1 3.8M6.1 6.1A13.4 13.4 0 0 0 1 11s4 7 11 7c1.5 0 2.87-.3 4.1-.8"/>'
+          : '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+      }
+    }
+
+    function alternarAbaLogin(modo) {
+      modoAuth = modo;
+      document.getElementById('tabEntrar').classList.toggle('active', modo === 'entrar');
+      document.getElementById('tabCadastrar').classList.toggle('active', modo === 'cadastrar');
+      document.getElementById('btnAuthSubmit').textContent = modo === 'entrar' ? 'Entrar' : 'Cadastrar';
+    }
+
+    async function submeterAuth(e) {
+      e.preventDefault();
+      const email = document.getElementById('authEmail').value;
+      const senha = document.getElementById('authSenha').value;
+
+      try {
+        if (modoAuth === 'entrar') {
+          await window.fazerLogin(email, senha);
+          toast('Login realizado com sucesso!', 'ok');
+        } else {
+          await window.fazerCadastro(email, senha);
+          toast('Conta criada com sucesso!', 'ok');
+        }
+      } catch (err) {
+        if (modoAuth === 'entrar' && (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found')) {
+          toast('Conta não cadastrada. Mudei para a aba "Criar Conta"!', 'err');
+          alternarAbaLogin('cadastrar');
+        } else {
+          toast('Erro de autenticação: ' + err.message, 'err');
+        }
+      }
+    }
+
+    async function submeterGoogle() {
+      try {
+        await window.fazerLoginGoogle();
+        toast('Login Google realizado!', 'ok');
+      } catch (err) {
+        toast('Erro no login Google: ' + err.message, 'err');
+      }
+    }
+
+    /* ---------------- helpers ---------------- */
+    const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+    const todayISO = () => new Date().toISOString().slice(0, 10);
+    const nowISO = () => new Date().toISOString();
+    const fmtMoney = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtDate = (iso) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return d.toLocaleDateString('pt-BR'); };
+    const fmtDateTime = (iso) => { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+    const addDays = (iso, days) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0, 10); };
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } [c]));
+    const slug = (s) => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, '').slice(0, 6) || 'PRD';
+
+    function toast(msg, type) {
+      const wrap = document.getElementById('toastWrap');
+      if (!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type || '');
+      el.textContent = msg;
+      wrap.appendChild(el);
+      setTimeout(() => { 
+        el.style.transition = 'opacity .25s';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 250); 
+      }, 3200);
+    }
+
+    /* ---------------- storage (Compatível com iPhone e iOS Safari) ---------------- */
+    const STORE_KEYS = ['config', 'insumos', 'produtos', 'producoes', 'vendas', 'scanlog', 'etiquetaLayout'];
+    let DB = {
+      config: {},
+      insumos: [],
+      produtos: [],
+      producoes: [],
+      vendas: [],
+      scanlog: [],
+      etiquetaLayout: {}
+    };
+
+    function defaultEtiquetaLayout() {
+      return {
+        larguraCm: 9,
+        alturaCm: 6,
+        alturaAuto: true,
+        orientacao: 'retrato',
+        fonteTitulo: 'Fraunces',
+        fonteCorpo: 'Manrope',
+        tamanhoTitulo: 0.5,
+        tamanhoCorpo: 0.3,
+        tamanhoCodigo: 0.25,
+        tamanhoQr: 76,
+        mostrarPeso: true,
+        mostrarCuidados: true,
+        mostrarContato: true,
+        textoEyebrow: 'Descrição do produto',
+        textoCuidadosTitulo: '⚠ Cuidados & Conservação',
+        textoContatoTitulo: 'Atendimento / Vendas',
+      };
+    }
+
+    function defaultConfig() {
+      return {
+        nome: 'Almeida Doce Gourmet',
+        whatsapp: '(32) 98448-1635',
+        instagram: 'almeidadocergourmet',
+        origem: 'Miraí - MG',
+        cuidados: 'Manter em local fresco, seco e ao abrigo da luz solar.\nApós aberto, consumir em até 3 dias.\nEvitar armazenar próximo a produtos com cheiro forte.',
+        deducaoInsumos: 'producao'
+      };
+    }
+
+    function seedData() {
+      const leite = { id: uid(), nome: 'Leite Condensado', unidade: 'un', estoque: 24, estoqueMin: 6, custo: 5.20 };
+      const choc = { id: uid(), nome: 'Chocolate em Pó', unidade: 'kg', estoque: 3.5, estoqueMin: 1, custo: 24.00 };
+      const bolacha = { id: uid(), nome: 'Bolacha Maisena', unidade: 'kg', estoque: 5, estoqueMin: 2, custo: 9.80 };
+      const insumos = [leite, choc, bolacha];
+      const produtos = [{
+        id: uid(),
+        nome: 'Palha Italiana Tradicional',
+        sku: 'PLH-TRAD',
+        categoria: 'Doces',
+        preco: 6.00,
+        validadeDias: 15,
+        estoque: 0,
+        estoqueMin: 10,
+        pesoMedio: 0.15,
+        receita: [
+          { insumoId: leite.id, qtd: 0.08 },
+          { insumoId: choc.id, qtd: 0.03 },
+          { insumoId: bolacha.id, qtd: 0.05 },
+        ]
+      }];
+      return { insumos, produtos };
+    }
+
+    async function loadKey(key, fallback) {
+      try {
+        if (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.get === 'function') {
+          const r = await window.storage.get(key, false);
+          if (r && r.value != null) return JSON.parse(r.value);
+        }
+        const local = localStorage.getItem('docemg_' + key);
+        if (local != null) return JSON.parse(local);
+        return fallback;
+      } catch (e) { return fallback; }
+    }
+
+    async function saveKey(key, value) {
+      try {
+        if (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.set === 'function') {
+          await window.storage.set(key, JSON.stringify(value), false);
+        }
+        localStorage.setItem('docemg_' + key, JSON.stringify(value));
+      } catch (e) { 
+        toast('Erro ao salvar dados', 'err');
+        console.error(e); 
+      }
+    }
+
+    window.loadAll = async function() {
+      const seeded = seedData();
+      DB.config = await loadKey('config', defaultConfig());
+      DB.insumos = await loadKey('insumos', seeded.insumos);
+      DB.produtos = await loadKey('produtos', seeded.produtos);
+      DB.producoes = await loadKey('producao', []);
+      DB.vendas = await loadKey('vendas', []);
+      DB.scanlog = await loadKey('scanlog', []);
+      DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
+      if (window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
+    };
+
+    function persist(...keys) { 
+      keys.forEach(k => saveKey(k, DB[k])); 
+      if (window.salvarDadosNoFirebase) {
+        window.salvarDadosNoFirebase(DB);
+      }
+    }
+
+    /* ---------------- lookups ---------------- */
+    const findInsumo = (id) => DB.insumos.find(i => i.id === id);
+    const findProduto = (id) => DB.produtos.find(p => p.id === id);
+
+    function produtoLowStock(p) { return p.estoque <= p.estoqueMin; }
+    function insumoLowStock(i) { return i.estoque <= i.estoqueMin; }
+
+    function findItemByCode(code) {
+      code = (code || '').trim().toUpperCase();
+      if (!code) return null;
+      for (const prod of DB.producoes) {
+        const it = prod.itens.find(x => x.codigo.toUpperCase() === code);
+        if (it) return { producao: prod, item: it };
+      }
+      return null;
+    }
+
+    function deduzInsumos(produto, qty) {
+      const out = [];
+      (produto.receita || []).forEach(r => {
+        const ins = findInsumo(r.insumoId);
+        if (!ins) return;
+        const amount = r.qtd * qty;
+        ins.estoque = Math.round((ins.estoque - amount) * 10000) / 10000;
+        out.push({ insumo: ins, deducted: amount });
+      });
+      return out;
+    }
+
+    /* ---------------- app / router state ---------------- */
+    let ROUTE = 'dashboard';
+    let SALE_CART = [];
+    let BIPAGEM_TIPO = 'venda';
+    let html5QrScannerBip = null;
+    let scannerBipAtivo = false;
+    let ultimoScanCodigo = '';
+    let ultimoScanTempo = 0;
+
+    const NAV_ITEMS = [
+      { id: 'dashboard', label: 'Painel', icon: iconDash },
+      { id: 'estoque', label: 'Estoque & Insumos', icon: iconLayers },
+      { id: 'produtos', label: 'Produtos', icon: iconTag },
+      { id: 'producao', label: 'Produção', icon: iconBox },
+      { id: 'vendas', label: 'Vendas', icon: iconCart },
+      { id: 'bipagem', label: 'Bipagem', icon: iconScan },
+      { id: 'etiquetas', label: 'Etiquetas', icon: iconTicket },
+      { id: 'relatorios', label: 'Relatórios', icon: iconChart },
+      { id: 'config', label: 'Configurações', icon: iconGear },
+    ];
+
+    function iconDash() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>'; }
+    function iconLayers() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>'; }
+    function iconTag() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 11v0a2 2 0 0 0 0 2.8l7.2 7.2a2 2 0 0 0 2.8 0L21 13V4a2 2 0 0 0-2-2h-7Z"/><circle cx="16" cy="8" r="1.4"/></svg>'; }
+    function iconBox() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4Z"/><path d="M3.5 7v10l8.5 4 8.5-4V7"/><path d="M12 11v10"/></svg>'; }
+    function iconCart() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2l2.6 12.6a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 8H6"/></svg>'; }
+    function iconScan() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 1 2 2h3M21 16v3a2 2 0 0 1-2 2h-3M3 12h18"/></svg>'; }
+    function iconTicket() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a1.5 1.5 0 0 0 0-3V9Z"/><path d="M9 7v10" stroke-dasharray="2 2"/></svg>'; }
+    function iconChart() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V10M11 19V5M18 19v-7"/><path d="M2 21h20"/></svg>'; }
+    function iconGear() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.9 7.9 0 0 0 0-3l1.9-1.5-2-3.4-2.2.9a8 8 0 0 0-2.6-1.5L14 2h-4l-.5 2.3a8 8 0 0 0-2.6 1.5l-2.2-.9-2 3.4L4.6 10a7.9 7.9 0 0 0 0 3l-1.9 1.5 2 3.4 2.2-.9c.8.7 1.7 1.2 2.6 1.5L10 22h4l.5-2.3c.9-.3 1.8-.8 2.6-1.5l2.2.9 2-3.4-1.9-1.5Z"/></svg>'; }
+
+    function renderNav() {
+      const nav = document.getElementById('nav');
+      if (!nav) return;
+      nav.innerHTML = NAV_ITEMS.map(it => `
+          <button class="nav-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>
+        `).join('');
+      nav.querySelectorAll('.nav-item').forEach(b => b.onclick = () => setRoute(b.dataset.route));
+
+      const mnav = document.getElementById('mobileNav');
+      if (!mnav) return;
+      mnav.innerHTML = NAV_ITEMS.map(it => `<button class="${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
+      mnav.querySelectorAll('button').forEach(b => b.onclick = () => setRoute(b.dataset.route));
+      const activeBtn = mnav.querySelector('button.active');
+      if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+
+    function setRoute(r) {
+      if (ROUTE === 'bipagem' && r !== 'bipagem') pararScannerBipagem();
+      ROUTE = r;
+      render();
+      if (r === 'etiquetas') aplicarLayoutEtiquetaCSS();
+    }
+
+    const TITLES = {
+      dashboard: ['Painel', 'Visão geral do seu negócio'],
+      estoque: ['Estoque & Insumos', 'Matérias-primas e níveis de estoque'],
+      produtos: ['Produtos', 'Cadastro de itens e fichas técnicas'],
+      producao: ['Produção', 'Registre lotes produzidos e gere etiquetas'],
+      vendas: ['Vendas', 'Registre vendas por bipagem ou manualmente'],
+      bipagem: ['Bipagem', 'Saída rápida de itens por QR Code'],
+      etiquetas: ['Etiquetas', 'Gere e reimprima etiquetas com QR Code'],
+      relatorios: ['Relatórios', 'Faturamento, consumo e desempenho'],
+      config: ['Configurações', 'Dados da empresa usados nas etiquetas'],
+    };
+
+    window.render = function() {
+      renderNav();
+      const [title, sub] = TITLES[ROUTE] || TITLES.dashboard;
+      document.getElementById('pageTitle').textContent = title;
+      document.getElementById('pageSub').textContent = sub;
+      const c = document.getElementById('content');
+      const actions = document.getElementById('topbarActions');
+      actions.innerHTML = '';
+
+      if (ROUTE === 'dashboard') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas'); toast('Dados sincronizados com sucesso!', 'ok');">💾 Salvar informações</button>`;
+        c.innerHTML = viewDashboard();
+        renderDashCharts();
+      } 
+      else if (ROUTE === 'estoque') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`;
+        c.innerHTML = viewEstoque();
+      }
+      else if (ROUTE === 'produtos') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`;
+        c.innerHTML = viewProdutos();
+      }
+      else if (ROUTE === 'producao') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`;
+        c.innerHTML = viewProducao();
+      }
+      else if (ROUTE === 'vendas') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`;
+        c.innerHTML = viewVendas();
+      }
+      else if (ROUTE === 'bipagem') c.innerHTML = viewBipagem();
+      else if (ROUTE === 'etiquetas') c.innerHTML = viewEtiquetas();
+      else if (ROUTE === 'relatorios') c.innerHTML = viewRelatorios();
+      else if (ROUTE === 'config') c.innerHTML = viewConfig();
+    };
+
+    function periodDays(n) {
+      const out = [];
+      for (let i = n - 1; i >= 0; i--) { out.push(addDays(todayISO(), -i)); }
+      return out;
+    }
+
+    function vendasFaturamento(v) { return v.itens.reduce((s, i) => s + i.preco * i.qty, 0); }
+
+    function vendaCusto(v) {
+      return v.itens.reduce((s, it) => {
+        const p = findProduto(it.produtoId);
+        if (!p) return s;
+        const custoUnit = (p.receita || []).reduce((acc, r) => { 
+          const ins = findInsumo(r.insumoId); 
+          return acc + (ins ? ins.custo * r.qtd : 0); 
+        }, 0);
+        return s + custoUnit * it.qty;
+      }, 0);
+    }
+
+    function viewDashboard() {
+      const hoje = todayISO();
+      const mesRef = hoje.slice(0, 7);
+      const vendasMes = DB.vendas.filter(v => v.data.slice(0, 7) === mesRef);
+      const faturamentoMes = vendasMes.reduce((s, v) => s + vendasFaturamento(v), 0);
+      const custoMes = vendasMes.reduce((s, v) => s + vendaCusto(v), 0);
+      const lucroMes = faturamentoMes - custoMes;
+      const vendasHoje = DB.vendas.filter(v => v.data === hoje);
+      const itensHoje = vendasHoje.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.qty, 0), 0);
+      const lowInsumos = DB.insumos.filter(insumoLowStock).length;
+      const lowProdutos = DB.produtos.filter(produtoLowStock).length;
+
+      const days = periodDays(14);
+      const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
+      const dayTotals = days.map(d => DB.vendas.filter(v => v.data === d).reduce((s, v) => s + vendasFaturamento(v), 0));
+
+      const porProduto = {};
+      DB.vendas.forEach(v => v.itens.forEach(it => { porProduto[it.produtoId] = (porProduto[it.produtoId] || 0) + it.qty; }));
+      const topProdutos = Object.entries(porProduto).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([id, qty]) => ({ nome: (findProduto(id) || {}).nome || '—', qty }));
+
+      window.__dash = { dayLabels, dayTotals, topProdutos };
+
+      return `
+      <div class="grid grid-4">
+        <div class="card stat"><div class="label">Faturamento (mês)</div><div class="value">${fmtMoney(faturamentoMes)}</div><div class="delta">${vendasMes.length} venda(s) no mês</div></div>
+        <div class="card stat"><div class="label">Lucro estimado (mês)</div><div class="value">${fmtMoney(lucroMes)}</div><div class="delta">custo insumos: ${fmtMoney(custoMes)}</div></div>
+        <div class="card stat"><div class="label">Itens vendidos hoje</div><div class="value">${itensHoje}</div><div class="delta">${vendasHoje.length} venda(s) hoje</div></div>
+        <div class="card stat"><div class="label">Alertas de estoque</div><div class="value">${lowInsumos+lowProdutos}</div><div class="delta ${(lowInsumos+lowProdutos)?'down':''}">${lowProdutos} produto(s) · ${lowInsumos} insumo(s)</div></div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:16px;">
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento — últimos 14 dias</h3>
+          <div class="chart-wrap"><canvas id="chartFat"></canvas></div>
+        </div>
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Produtos mais vendidos</h3>
+          <div class="chart-wrap">${topProdutos.length? '<canvas id="chartTop"></canvas>' : emptyBlock('Sem vendas ainda','Registre vendas para ver o ranking aqui.')}</div>
+        </div>
+      </div>
+      `;
+    }
+
+    function emptyBlock(title, text) {
+      return `<div class="empty" style="height:100%;display:flex;flex-direction:column;justify-content:center;"><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
+    }
+
+    let chartFatInstance = null, chartTopInstance = null;
+
+    function renderDashCharts() {
+      const dash = window.__dash;
+      if (!dash) return;
+      const fatCanvas = document.getElementById('chartFat');
+      if (fatCanvas) {
+        if (chartFatInstance) chartFatInstance.destroy();
+        chartFatInstance = new Chart(fatCanvas, {
+          type: 'line',
+          data: { labels: dash.dayLabels, datasets: [{ data: dash.dayTotals, borderColor: '#8B5A3C', backgroundColor: 'rgba(139, 90, 60, .08)', fill: true, tension: .35, pointRadius: 2 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => 'R$ ' + v } } } }
+        });
+      }
+      const topCanvas = document.getElementById('chartTop');
+      if (topCanvas) {
+        if (chartTopInstance) chartTopInstance.destroy();
+        chartTopInstance = new Chart(topCanvas, {
+          type: 'bar',
+          data: { labels: dash.topProdutos.map(p => p.nome), datasets: [{ data: dash.topProdutos.map(p => p.qty), backgroundColor: '#C29A6B', borderRadius: 6 }] },
+          options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { stepSize: 1 } } } }
+        });
+      }
+    }
+
+    /* ---------------- MÓDULOS DESBLOQUEADOS ---------------- */
+
+    // Módulo Estoque & Insumos
+    function viewEstoque() {
+      const rows = DB.insumos.map(ins => {
+        const isLow = insumoLowStock(ins);
+        return `
+          <tr class="${isLow ? 'low-stock-row' : ''}">
+            <td><b>${esc(ins.nome)}</b></td>
+            <td><span class="mono">${ins.estoque} ${esc(ins.unidade)}</span></td>
+            <td><span class="mono">${ins.estoqueMin} ${esc(ins.unidade)}</span></td>
+            <td>${fmtMoney(ins.custo)}</td>
+            <td>${isLow ? '<span class="badge badge-danger">Baixo</span>' : '<span class="badge badge-ok">Normal</span>'}</td>
+            <td style="text-align:right;">
+              <button class="icon-btn" onclick="modalInsumo('${ins.id}')">✏️ Edit</button>
+              <button class="icon-btn" onclick="deletarInsumo('${ins.id}')">🗑️</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th>Estoque Atual</th>
+                  <th>Estoque Mín.</th>
+                  <th>Custo / Un.</th>
+                  <th>Status</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum insumo cadastrado.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalInsumo(id = null) {
+      const ins = DB.insumos.find(i => i.id === id) || { nome: '', unidade: 'un', estoque: 0, estoqueMin: 5, custo: 0 };
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Insumo' : 'Novo Insumo'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Nome do Insumo</label>
+                <input type="text" id="insNome" class="input" value="${esc(ins.nome)}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Unidade</label>
+                  <select id="insUnidade" class="input">
+                    <option value="un" ${ins.unidade === 'un' ? 'selected' : ''}>Unidade (un)</option>
+                    <option value="kg" ${ins.unidade === 'kg' ? 'selected' : ''}>Quilograma (kg)</option>
+                    <option value="g" ${ins.unidade === 'g' ? 'selected' : ''}>Grama (g)</option>
+                    <option value="l" ${ins.unidade === 'l' ? 'selected' : ''}>Litro (l)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Custo Unitário (R$)</label>
+                  <input type="number" step="0.01" id="insCusto" class="input" value="${ins.custo}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Estoque Atual</label>
+                  <input type="number" step="0.001" id="insEstoque" class="input" value="${ins.estoque}">
+                </div>
+                <div class="field">
+                  <label>Estoque Mínimo</label>
+                  <input type="number" step="0.001" id="insEstoqueMin" class="input" value="${ins.estoqueMin}">
+                </div>
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarInsumo('${id || ''}')">Salvar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarInsumo(id) {
+      const nome = document.getElementById('insNome').value.trim();
+      if (!nome) return toast('Informe o nome do insumo', 'err');
+      const ins = {
+        id: id || uid(),
+        nome,
+        unidade: document.getElementById('insUnidade').value,
+        custo: parseFloat(document.getElementById('insCusto').value) || 0,
+        estoque: parseFloat(document.getElementById('insEstoque').value) || 0,
+        estoqueMin: parseFloat(document.getElementById('insEstoqueMin').value) || 0
+      };
+      if (id) {
+        const idx = DB.insumos.findIndex(i => i.id === id);
+        if (idx !== -1) DB.insumos[idx] = ins;
+      } else {
+        DB.insumos.push(ins);
+      }
+      persist('insumos');
+      fecharModalDirect();
+      render();
+      toast('Insumo salvo!', 'ok');
+    }
+
+    function deletarInsumo(id) {
+      if (!confirm('Deseja excluir este insumo?')) return;
+      DB.insumos = DB.insumos.filter(i => i.id !== id);
+      persist('insumos');
+      render();
+      toast('Insumo removido!', 'ok');
+    }
+
+    // Módulo Produtos
+    function viewProdutos() {
+      const rows = DB.produtos.map(p => {
+        const custoFicha = (p.receita || []).reduce((acc, r) => {
+          const ins = findInsumo(r.insumoId);
+          return acc + (ins ? ins.custo * r.qtd : 0);
+        }, 0);
+        return `
+          <tr>
+            <td><b>${esc(p.nome)}</b><br><small class="mono">${esc(p.sku)}</small></td>
+            <td>${esc(p.categoria || 'Geral')}</td>
+            <td>${fmtMoney(p.preco)}</td>
+            <td>${fmtMoney(custoFicha)}</td>
+            <td><span class="mono">${p.estoque} un</span></td>
+            <td style="text-align:right;">
+              <button class="icon-btn" onclick="modalProduto('${p.id}')">✏️ Edit</button>
+              <button class="icon-btn" onclick="deletarProduto('${p.id}')">🗑️</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Categoria</th>
+                  <th>Preço Venda</th>
+                  <th>Custo Ficha</th>
+                  <th>Estoque</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum produto cadastrado.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalProduto(id = null) {
+      const prod = DB.produtos.find(p => p.id === id) || {
+        nome: '', sku: '', categoria: 'Doces', preco: 0, validadeDias: 3, estoque: 0, estoqueMin: 10, pesoMedio: 0.1, receita: []
+      };
+
+      const optionsInsumos = DB.insumos.map(i => `<option value="${i.id}">${esc(i.nome)} (${i.unidade})</option>`).join('');
+
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal" style="max-width: 600px;">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Produto' : 'Novo Produto'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>Nome do Produto</label>
+                  <input type="text" id="prdNome" class="input" value="${esc(prod.nome)}">
+                </div>
+                <div class="field">
+                  <label>SKU / Código</label>
+                  <input type="text" id="prdSku" class="input" value="${esc(prod.sku)}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Preço Venda (R$)</label>
+                  <input type="number" step="0.01" id="prdPreco" class="input" value="${prod.preco}">
+                </div>
+                <div class="field">
+                  <label>Validade (Dias)</label>
+                  <input type="number" id="prdValidade" class="input" value="${prod.validadeDias}">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Estoque Inicial</label>
+                  <input type="number" id="prdEstoque" class="input" value="${prod.estoque}">
+                </div>
+                <div class="field">
+                  <label>Estoque Mínimo</label>
+                  <input type="number" id="prdEstoqueMin" class="input" value="${prod.estoqueMin}">
+                </div>
+              </div>
+              <div class="divider"></div>
+              <h4>Ficha Técnica / Receita</h4>
+              <div id="recipeContainer" style="margin-top: 10px;"></div>
+              <button class="btn btn-secondary btn-sm" onclick="addRecipeRow()" style="margin-top:8px;">+ Adicionar Insumo</button>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarProduto('${id || ''}')">Salvar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+      window.__activeRecipe = prod.receita ? [...prod.receita] : [];
+      renderRecipeRows(optionsInsumos);
+    }
+
+    function renderRecipeRows(optionsInsumos) {
+      const container = document.getElementById('recipeContainer');
+      if (!container) return;
+      container.innerHTML = window.__activeRecipe.map((r, index) => `
+        <div class="recipe-row">
+          <select class="input" onchange="window.__activeRecipe[${index}].insumoId = this.value">
+            <option value="">Selecione Insumo...</option>
+            ${DB.insumos.map(i => `<option value="${i.id}" ${i.id === r.insumoId ? 'selected' : ''}>${esc(i.nome)} (${i.unidade})</option>`).join('')}
+          </select>
+          <input type="number" step="0.001" placeholder="Qtd" class="input" value="${r.qtd}" onchange="window.__activeRecipe[${index}].qtd = parseFloat(this.value)||0">
+          <button class="icon-btn" onclick="window.__activeRecipe.splice(${index},1); renderRecipeRows();">🗑️</button>
+        </div>
+      `).join('');
+    }
+
+    function addRecipeRow() {
+      window.__activeRecipe.push({ insumoId: '', qtd: 0 });
+      renderRecipeRows();
+    }
+
+    function salvarProduto(id) {
+      const nome = document.getElementById('prdNome').value.trim();
+      if (!nome) return toast('Informe o nome do produto', 'err');
+      const prod = {
+        id: id || uid(),
+        nome,
+        sku: document.getElementById('prdSku').value.trim() || slug(nome),
+        preco: parseFloat(document.getElementById('prdPreco').value) || 0,
+        validadeDias: parseInt(document.getElementById('prdValidade').value) || 1,
+        estoque: parseFloat(document.getElementById('prdEstoque').value) || 0,
+        estoqueMin: parseFloat(document.getElementById('prdEstoqueMin').value) || 0,
+        receita: window.__activeRecipe.filter(r => r.insumoId && r.qtd > 0)
+      };
+      if (id) {
+        const idx = DB.produtos.findIndex(p => p.id === id);
+        if (idx !== -1) DB.produtos[idx] = prod;
+      } else {
+        DB.produtos.push(prod);
+      }
+      persist('produtos');
+      fecharModalDirect();
+      render();
+      toast('Produto salvo!', 'ok');
+    }
+
+    function deletarProduto(id) {
+      if (!confirm('Deseja excluir este produto?')) return;
+      DB.produtos = DB.produtos.filter(p => p.id !== id);
+      persist('produtos');
+      render();
+      toast('Produto removido!', 'ok');
+    }
+
+    // Módulo Produção
+    function viewProducao() {
+      const rows = DB.producoes.map(p => `
+        <tr>
+          <td><span class="mono">${esc(p.lote)}</span></td>
+          <td><b>${esc((findProduto(p.produtoId) || {}).nome || '—')}</b></td>
+          <td><span class="mono">${p.quantidade} un</span></td>
+          <td>${fmtDate(p.dataFabricacao)}</td>
+          <td>${fmtDate(p.dataValidade)}</td>
+          <td style="text-align:right;">
+            <button class="icon-btn" onclick="modalProducao('${p.id}')">✏️ Edit</button>
+            <button class="icon-btn" onclick="deletarProducao('${p.id}')">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Fabricação</th>
+                  <th>Validade</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="6" class="empty">Nenhum lote produzido.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    const DIAS_VALIDADE_PADRAO = 15;
+
+    function atualizarValidadeProducao() {
+      const fabEl = document.getElementById('prodDataFab');
+      const valEl = document.getElementById('prodDataVal');
+      if (!fabEl || !valEl) return;
+      const fab = fabEl.value || todayISO();
+      valEl.value = addDays(fab, DIAS_VALIDADE_PADRAO);
+    }
+
+    function modalProducao(id = null) {
+      const prod = DB.producoes.find(p => p.id === id) || {
+        produtoId: DB.produtos[0]?.id || '',
+        quantidade: 10,
+        dataFabricacao: todayISO(),
+        dataValidade: ''
+      };
+      const dataFabInicial = prod.dataFabricacao || todayISO();
+      const dataValInicial = prod.dataValidade || addDays(dataFabInicial, DIAS_VALIDADE_PADRAO);
+
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Produção' : 'Registrar Produção'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Produto</label>
+                <select id="prodProdutoId" class="input">
+                  ${DB.produtos.map(p => `<option value="${p.id}" ${p.id === prod.produtoId ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Quantidade Produzida</label>
+                <input type="number" id="prodQtd" class="input" value="${prod.quantidade}">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Data Fabricação</label>
+                  <input type="date" id="prodDataFab" class="input" value="${dataFabInicial}" oninput="atualizarValidadeProducao()">
+                </div>
+                <div class="field">
+                  <label>Data Validade</label>
+                  <input type="date" id="prodDataVal" class="input" value="${dataValInicial}">
+                </div>
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarProducao('${id || ''}')">Confirmar Produção</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarProducao(id = '') {
+      const produtoId = document.getElementById('prodProdutoId').value;
+      const qtd = parseInt(document.getElementById('prodQtd').value) || 0;
+      const dataFab = document.getElementById('prodDataFab').value || todayISO();
+      const produto = findProduto(produtoId);
+      if (!produto || qtd <= 0) return toast('Insira uma quantidade válida', 'err');
+
+      const dataVal = document.getElementById('prodDataVal').value || addDays(dataFab, produto.validadeDias);
+
+      if (id) {
+        const prod = DB.producoes.find(p => p.id === id);
+        if (prod) {
+          const diff = qtd - prod.quantidade;
+          prod.quantidade = qtd;
+          prod.produtoId = produtoId;
+          prod.dataFabricacao = dataFab;
+          prod.dataValidade = dataVal;
+          produto.estoque = Math.max(0, produto.estoque + diff);
+        }
+      } else {
+        const lote = 'L' + Date.now().toString().slice(-6);
+        const itens = [];
+        for (let i = 1; i <= qtd; i++) {
+          itens.push({
+            codigo: `${produto.sku}-${lote}-${i}`,
+            status: 'disponivel'
+          });
+        }
+
+        if (DB.config.deducaoInsumos === 'producao') {
+          deduzInsumos(produto, qtd);
+        }
+
+        produto.estoque += qtd;
+
+        DB.producoes.push({
+          id: uid(),
+          lote,
+          produtoId,
+          quantidade: qtd,
+          dataFabricacao: dataFab,
+          dataValidade: dataVal,
+          itens
+        });
+      }
+
+      persist('produtos', 'producoes', 'insumos');
+      fecharModalDirect();
+      render();
+      toast(id ? 'Produção atualizada com sucesso!' : 'Lote produzido com sucesso!', 'ok');
+    }
+
+    function deletarProducao(id) {
+      if (!confirm('Deseja excluir este registro de produção?')) return;
+      const prod = DB.producoes.find(p => p.id === id);
+      if (prod) {
+        const produto = findProduto(prod.produtoId);
+        if (produto) {
+          produto.estoque = Math.max(0, produto.estoque - prod.quantidade);
+        }
+      }
+      DB.producoes = DB.producoes.filter(p => p.id !== id);
+      persist('produtos', 'producoes');
+      render();
+      toast('Registro de produção removido!', 'ok');
+    }
+
+    // Módulo Vendas
+    function viewVendas() {
+      const rows = DB.vendas.map(v => `
+        <tr>
+          <td><span class="mono">${fmtDateTime(v.data)}</span></td>
+          <td>${v.itens.map(i => `${i.qty}x ${(findProduto(i.produtoId)||{}).nome||'—'}`).join(', ')}</td>
+          <td><b>${fmtMoney(vendasFaturamento(v))}</b></td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="card card-pad">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data/Hora</th>
+                  <th>Itens</th>
+                  <th>Total Venda</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.length ? rows : '<tr><td colspan="3" class="empty">Nenhuma venda realizada.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function modalVenda() {
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>Nova Venda Manual</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field">
+                <label>Produto</label>
+                <select id="vendaProdutoId" class="input">
+                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Quantidade</label>
+                <input type="number" id="vendaQtd" class="input" value="1">
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarVenda()">Finalizar Venda</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarVenda() {
+      const produtoId = document.getElementById('vendaProdutoId').value;
+      const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
+      const produto = findProduto(produtoId);
+      if (!produto || qty <= 0) return toast('Quantidade inválida', 'err');
+
+      produto.estoque = Math.max(0, produto.estoque - qty);
+
+      DB.vendas.push({
+        id: uid(),
+        data: nowISO(),
+        itens: [{ produtoId, qty, preco: produto.preco }]
+      });
+
+      persist('produtos', 'vendas');
+      fecharModalDirect();
+      render();
+      toast('Venda registrada com sucesso!', 'ok');
+    }
+
+    // Módulo Bipagem
+    const TIPO_BIP_LABELS = {
+      venda: 'Venda Avulsa',
+      doacao: 'Doação',
+      perda: 'Perda / Avaria'
+    };
+
+    function viewBipagem() {
+      return `
+        <div class="card card-pad scan-box">
+          <h2>Saída Rápida por Bipagem</h2>
+          <p class="hint">Escaneie o QR Code da etiqueta com a câmera ou digite/leia o código com um leitor físico.</p>
+
+          <div class="field" style="max-width:320px;margin:18px auto 0;text-align:left;">
+            <label>Tipo de Operação</label>
+            <select id="bipTipo" class="input" onchange="BIPAGEM_TIPO = this.value">
+              <option value="venda" ${BIPAGEM_TIPO === 'venda' ? 'selected' : ''}>Venda Avulsa</option>
+              <option value="doacao" ${BIPAGEM_TIPO === 'doacao' ? 'selected' : ''}>Doação</option>
+              <option value="perda" ${BIPAGEM_TIPO === 'perda' ? 'selected' : ''}>Perda / Avaria</option>
+            </select>
+          </div>
+
+          <div style="max-width:320px;margin:16px auto;">
+            <input type="text" id="bipInput" class="input scan-input" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)" autocomplete="off">
+          </div>
+
+          <button class="btn btn-secondary" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">
+            ${scannerBipAtivo ? '⏹ Desativar Câmera' : '📷 Ativar Câmera'}
+          </button>
+
+          <div id="cameraReader" style="margin:18px auto 0;"></div>
+
+          <div class="divider"></div>
+          <div class="table-wrap" style="text-align:left;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data/Hora</th>
+                  <th>Código</th>
+                  <th>Tipo</th>
+                </tr>
+              </thead>
+              <tbody id="bipagemLogBody">
+                ${renderBipagemLogRows()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBipagemLogRows() {
+      const itens = (DB.scanlog || []).slice(-15).reverse();
+      if (!itens.length) return '<tr><td colspan="3" class="empty">Nenhuma bipagem registrada ainda.</td></tr>';
+      return itens.map(l => {
+        const badgeClass = l.tipo === 'perda' ? 'badge-danger' : (l.tipo === 'doacao' ? 'badge-warn' : 'badge-ok');
+        return `
+          <tr>
+            <td class="mono">${fmtDateTime(l.data)}</td>
+            <td class="mono">${esc(l.codigo)}</td>
+            <td><span class="badge ${badgeClass}">${esc(l.tipoLabel || TIPO_BIP_LABELS[l.tipo] || l.tipo)}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function atualizarBipagemUI() {
+      const tbody = document.getElementById('bipagemLogBody');
+      if (tbody) {
+        tbody.innerHTML = renderBipagemLogRows();
+      }
+    }
+
+    function processarBipagemCodigo(codigoBruto) {
+      const codigo = (codigoBruto || '').trim();
+      if (!codigo) return;
+
+      const achado = findItemByCode(codigo);
+      if (!achado) {
+        toast('Código não encontrado: ' + codigo, 'err');
+        return;
+      }
+      const { producao, item } = achado;
+      if (item.status && item.status !== 'disponivel') {
+        toast('Este item já foi baixado anteriormente!', 'err');
+        return;
+      }
+      const produto = findProduto(producao.produtoId);
+      if (!produto) {
+        toast('Produto não encontrado para este item', 'err');
+        return;
+      }
+
+      const tipo = BIPAGEM_TIPO;
+      produto.estoque = Math.max(0, produto.estoque - 1);
+      item.status = tipo === 'perda' ? 'perda' : (tipo === 'doacao' ? 'doado' : 'vendido');
+
+      if (tipo === 'venda') {
+        DB.vendas.push({
+          id: uid(),
+          data: nowISO(),
+          itens: [{ produtoId: produto.id, qty: 1, preco: produto.preco }],
+          origem: 'bipagem',
+          codigo
+        });
+      }
+
+      DB.scanlog.push({
+        id: uid(),
+        data: nowISO(),
+        codigo,
+        produtoId: produto.id,
+        tipo,
+        tipoLabel: TIPO_BIP_LABELS[tipo] || tipo
+      });
+
+      persist('produtos', 'vendas', 'scanlog', 'producoes');
+      atualizarBipagemUI();
+
+      if (tipo === 'venda') {
+        toast(`Venda registrada: ${produto.nome} (${fmtMoney(produto.preco)})`, 'ok');
+      } else if (tipo === 'doacao') {
+        toast(`Doação registrada: ${produto.nome}`, 'ok');
+      } else {
+        toast(`Perda/Avaria registrada: ${produto.nome}`, 'err');
+      }
+    }
+
+    function processarBip(e) {
+      if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (!val) return;
+        processarBipagemCodigo(val);
+        e.target.value = '';
+      }
+    }
+
+    function alternarScannerBipagem() {
+      if (scannerBipAtivo) {
+        pararScannerBipagem();
+      } else {
+        iniciarScannerBipagem();
+      }
+    }
+
+    function iniciarScannerBipagem() {
+      const readerEl = document.getElementById('cameraReader');
+      const btn = document.getElementById('btnToggleScannerBip');
+      if (!readerEl || typeof Html5Qrcode === 'undefined') {
+        toast('Leitor de QR Code não disponível neste navegador', 'err');
+        return;
+      }
+      try {
+        html5QrScannerBip = new Html5Qrcode('cameraReader');
+        html5QrScannerBip.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            const agora = Date.now();
+            if (decodedText === ultimoScanCodigo && (agora - ultimoScanTempo) < 3000) return;
+            ultimoScanCodigo = decodedText;
+            ultimoScanTempo = agora;
+            processarBipagemCodigo(decodedText);
+          },
+          () => { /* ignora erros de leitura quadro a quadro */ }
+        ).then(() => {
+          scannerBipAtivo = true;
+          if (btn) btn.textContent = '⏹ Desativar Câmera';
+        }).catch((err) => {
+          toast('Não foi possível acessar a câmera: ' + err, 'err');
+        });
+      } catch (err) {
+        toast('Erro ao iniciar o leitor de QR Code', 'err');
+      }
+    }
+
+    function pararScannerBipagem() {
+      if (html5QrScannerBip) {
+        html5QrScannerBip.stop().then(() => {
+          html5QrScannerBip.clear();
+        }).catch(() => {}).finally(() => {
+          html5QrScannerBip = null;
+          scannerBipAtivo = false;
+          const btn = document.getElementById('btnToggleScannerBip');
+          if (btn) btn.textContent = '📷 Ativar Câmera';
+        });
+      } else {
+        scannerBipAtivo = false;
+      }
+    }
+
+    // Módulo Etiquetas
+    function gerarQrDataUrl(texto) {
+      try {
+        const qr = qrcode(0, 'M');
+        qr.addData(String(texto));
+        qr.make();
+        return qr.createDataURL(6, 2);
+      } catch (e) {
+        console.error('Erro ao gerar QR Code', e);
+        return '';
+      }
+    }
+
+    function viewEtiquetas() {
+      const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
+      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
+      const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
+        ? window.ETQ_PRODUCAO_ID
+        : (producoesComItens[producoesComItens.length - 1]?.id || '');
+      const prod = producoesComItens.find(p => p.id === producaoSelId);
+      const p = prod ? findProduto(prod.produtoId) : null;
+
+      const labelsHtml = prod ? (prod.itens || []).map((it, idx) => `
+        <div class="label-card">
+          <div class="label-eyebrow">${esc(layout.textoEyebrow || DB.config.nome)}</div>
+          <div class="label-num">${idx + 1}</div>
+          <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
+          <div class="label-row">Validade: <b>${fmtDate(prod.dataValidade)}</b></div>
+          <div class="label-qr-wrap">
+            <img src="${gerarQrDataUrl(it.codigo)}" alt="QR Code">
+          </div>
+          <div class="label-code">${esc(it.codigo)}</div>
+        </div>
+      `).join('') : '';
+
+      return `
+        <div class="card card-pad">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+            <div>
+              <h3>Impressão e Gerador de Etiquetas</h3>
+              <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir Etiquetas</button>
+              <button class="btn btn-primary" onclick="salvarEtiquetasPDF()">📄 Salvar como PDF</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          ${producoesComItens.length ? `
+          <div class="field" style="max-width:360px;">
+            <label>Lote / Produção</label>
+            <select class="input" onchange="window.ETQ_PRODUCAO_ID = this.value; render();">
+              ${producoesComItens.map(pr => {
+                const prNome = (findProduto(pr.produtoId) || {}).nome || 'Produto';
+                return `<option value="${pr.id}" ${pr.id === producaoSelId ? 'selected' : ''}>${esc(prNome)} — Lote ${esc(pr.lote)} (${(pr.itens || []).length} un.)</option>`;
+              }).join('')}
+            </select>
+          </div>
+          ` : ''}
+
+          <div class="grid grid-4" style="margin:16px 0;">
+            <div class="field">
+              <label>Largura (cm)</label>
+              <input type="number" step="0.1" min="1" id="etqLargura" class="input" value="${layout.larguraCm}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Altura (cm)</label>
+              <input type="number" step="0.1" min="1" id="etqAltura" class="input" value="${layout.alturaCm}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Orientação</label>
+              <select id="etqOrientacao" class="input" onchange="atualizarLayoutEtiqueta()">
+                <option value="retrato" ${layout.orientacao !== 'paisagem' ? 'selected' : ''}>Retrato</option>
+                <option value="paisagem" ${layout.orientacao === 'paisagem' ? 'selected' : ''}>Paisagem</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>QR Code (px)</label>
+              <input type="number" step="2" min="40" id="etqQr" class="input" value="${layout.tamanhoQr}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+          </div>
+          <div class="grid grid-3" style="margin-bottom:8px;">
+            <div class="field">
+              <label>Fonte Título (cm)</label>
+              <input type="number" step="0.05" min="0.1" id="etqFonteTitulo" class="input" value="${layout.tamanhoTitulo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Fonte Corpo (cm)</label>
+              <input type="number" step="0.02" min="0.1" id="etqFonteCorpo" class="input" value="${layout.tamanhoCorpo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Fonte Código (cm)</label>
+              <input type="number" step="0.02" min="0.1" id="etqFonteCodigo" class="input" value="${layout.tamanhoCodigo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="labels-sheet" id="labelsSheet">
+            ${labelsHtml || '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function atualizarLayoutEtiqueta() {
+      const layout = DB.etiquetaLayout || (DB.etiquetaLayout = defaultEtiquetaLayout());
+      const largEl = document.getElementById('etqLargura');
+      const altEl = document.getElementById('etqAltura');
+      const oriEl = document.getElementById('etqOrientacao');
+      const qrEl = document.getElementById('etqQr');
+      const ftEl = document.getElementById('etqFonteTitulo');
+      const fcEl = document.getElementById('etqFonteCorpo');
+      const fcodEl = document.getElementById('etqFonteCodigo');
+
+      if (largEl) layout.larguraCm = parseFloat(largEl.value) || layout.larguraCm;
+      if (altEl) layout.alturaCm = parseFloat(altEl.value) || layout.alturaCm;
+      if (oriEl) layout.orientacao = oriEl.value;
+      if (qrEl) layout.tamanhoQr = parseFloat(qrEl.value) || layout.tamanhoQr;
+      if (ftEl) layout.tamanhoTitulo = parseFloat(ftEl.value) || layout.tamanhoTitulo;
+      if (fcEl) layout.tamanhoCorpo = parseFloat(fcEl.value) || layout.tamanhoCorpo;
+      if (fcodEl) layout.tamanhoCodigo = parseFloat(fcodEl.value) || layout.tamanhoCodigo;
+
+      aplicarLayoutEtiquetaCSS();
+      persist('etiquetaLayout');
+    }
+
+    window.aplicarLayoutEtiquetaCSS = function aplicarLayoutEtiquetaCSS() {
+      const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
+      const root = document.documentElement;
+      const bruto1 = Number(layout.larguraCm) || 9;
+      const bruto2 = Number(layout.alturaCm) || 6;
+      const maior = Math.max(bruto1, bruto2);
+      const menor = Math.min(bruto1, bruto2);
+      const largura = layout.orientacao === 'paisagem' ? maior : menor;
+      const altura = layout.orientacao === 'paisagem' ? menor : maior;
+
+      root.style.setProperty('--lbl-w', largura + 'cm');
+      root.style.setProperty('--lbl-min-h', altura + 'cm');
+      root.style.setProperty('--lbl-size-title', (layout.tamanhoTitulo || 0.5) + 'cm');
+      root.style.setProperty('--lbl-size-body', (layout.tamanhoCorpo || 0.3) + 'cm');
+      root.style.setProperty('--lbl-size-code', (layout.tamanhoCodigo || 0.25) + 'cm');
+      root.style.setProperty('--lbl-qr-size', (layout.tamanhoQr || 76) + 'px');
+      root.style.setProperty('--etq-page-w', largura + 'cm');
+      root.style.setProperty('--etq-page-h', altura + 'cm');
+    };
+
+    function salvarEtiquetasPDF() {
+      document.body.classList.add('etq-export-pdf');
+      toast('Na janela de impressão, selecione "Salvar como PDF" como destino.', 'ok');
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => document.body.classList.remove('etq-export-pdf'), 600);
+      }, 200);
+    }
+
+    // Módulo Relatórios
+    function viewRelatorios() {
+      return `
+        <div class="card card-pad">
+          <h3>Relatório Consolidado</h3>
+          <p class="hint">Estatísticas detalhadas de consumo de insumos e margem de lucro.</p>
+          <div class="divider"></div>
+          <p>Total de Vendas Registradas: <b>${DB.vendas.length}</b></p>
+          <p>Total de Lotes Produzidos: <b>${DB.producoes.length}</b></p>
+        </div>
+      `;
+    }
+
+    // Módulo Configurações
+    function viewConfig() {
+      const cfg = DB.config;
+      return `
+        <div class="card card-pad">
+          <h3>Configurações da Empresa</h3>
+          <div class="divider"></div>
+          <div class="field">
+            <label>Nome Comercial</label>
+            <input type="text" id="cfgNome" class="input" value="${esc(cfg.nome)}">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>WhatsApp</label>
+              <input type="text" id="cfgWhatsapp" class="input" value="${esc(cfg.whatsapp)}">
+            </div>
+            <div class="field">
+              <label>Instagram</label>
+              <input type="text" id="cfgInstagram" class="input" value="${esc(cfg.instagram)}">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarConfig()">Salvar Configurações</button>
+        </div>
+      `;
+    }
+
+    function salvarConfig() {
+      DB.config.nome = document.getElementById('cfgNome').value;
+      DB.config.whatsapp = document.getElementById('cfgWhatsapp').value;
+      DB.config.instagram = document.getElementById('cfgInstagram').value;
+      persist('config');
+      toast('Configurações salvas!', 'ok');
+    }
+
+    function fecharModal(e) {
+      if (e.target.classList.contains('modal-backdrop')) fecharModalDirect();
+    }
+
+    function fecharModalDirect() {
+      document.getElementById('modalRoot').innerHTML = '';
+    }
+  </script>
+</body>
+</html>
