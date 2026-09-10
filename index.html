@@ -927,16 +927,29 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   }
 
   @media print {
+    @page { margin: 8mm; }
     body * { visibility: hidden; }
-    #print-area, #print-area * { visibility: visible; }
-    #print-area {
+    #labelsSheet, #labelsSheet * { visibility: visible; }
+    #labelsSheet {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
-      padding: 14px;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
-    .label-card { box-shadow: none; }
+    .label-card {
+      box-shadow: none;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  }
+
+  body.etq-export-pdf .label-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .scan-box {
@@ -1109,7 +1122,12 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         </div>
         <div class="field" style="text-align: left;">
           <label>Senha</label>
-          <input type="password" id="authSenha" class="input" placeholder="••••••••" required>
+          <div style="position:relative;">
+            <input type="password" id="authSenha" class="input" placeholder="••••••••" required style="padding-right:42px;">
+            <button type="button" class="icon-btn" id="toggleSenhaBtn" onclick="alternarVisibilidadeSenha()" aria-label="Mostrar senha" style="position:absolute;right:3px;top:50%;transform:translateY(-50%);">
+              <svg id="iconOlho" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
         <button type="submit" id="btnAuthSubmit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 8px;">
           Entrar
@@ -1158,6 +1176,19 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   <script>
     /* ---------------- Auth UI Control ---------------- */
     let modoAuth = 'entrar';
+
+    function alternarVisibilidadeSenha() {
+      const input = document.getElementById('authSenha');
+      const icon = document.getElementById('iconOlho');
+      if (!input) return;
+      const ficaraVisivel = input.type === 'password';
+      input.type = ficaraVisivel ? 'text' : 'password';
+      if (icon) {
+        icon.innerHTML = ficaraVisivel
+          ? '<path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M9.9 4.24A11 11 0 0 1 12 4c7 0 11 7 11 7a13.3 13.3 0 0 1-3.1 3.8M6.1 6.1A13.4 13.4 0 0 0 1 11s4 7 11 7c1.5 0 2.87-.3 4.1-.8"/>'
+          : '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+      }
+    }
 
     function alternarAbaLogin(modo) {
       modoAuth = modo;
@@ -1240,6 +1271,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         larguraCm: 9,
         alturaCm: 6,
         alturaAuto: true,
+        orientacao: 'retrato',
         fonteTitulo: 'Fraunces',
         fonteCorpo: 'Manrope',
         tamanhoTitulo: 0.5,
@@ -1323,6 +1355,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       DB.vendas = await loadKey('vendas', []);
       DB.scanlog = await loadKey('scanlog', []);
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
+      if (window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
     };
 
     function persist(...keys) { 
@@ -1364,6 +1397,11 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     /* ---------------- app / router state ---------------- */
     let ROUTE = 'dashboard';
     let SALE_CART = [];
+    let BIPAGEM_TIPO = 'venda';
+    let html5QrScannerBip = null;
+    let scannerBipAtivo = false;
+    let ultimoScanCodigo = '';
+    let ultimoScanTempo = 0;
 
     const NAV_ITEMS = [
       { id: 'dashboard', label: 'Painel', icon: iconDash },
@@ -1404,8 +1442,10 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     }
 
     function setRoute(r) {
+      if (ROUTE === 'bipagem' && r !== 'bipagem') pararScannerBipagem();
       ROUTE = r;
       render();
+      if (r === 'etiquetas') aplicarLayoutEtiquetaCSS();
     }
 
     const TITLES = {
@@ -1873,6 +1913,16 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       `;
     }
 
+    const DIAS_VALIDADE_PADRAO = 15;
+
+    function atualizarValidadeProducao() {
+      const fabEl = document.getElementById('prodDataFab');
+      const valEl = document.getElementById('prodDataVal');
+      if (!fabEl || !valEl) return;
+      const fab = fabEl.value || todayISO();
+      valEl.value = addDays(fab, DIAS_VALIDADE_PADRAO);
+    }
+
     function modalProducao(id = null) {
       const prod = DB.producoes.find(p => p.id === id) || {
         produtoId: DB.produtos[0]?.id || '',
@@ -1880,6 +1930,8 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         dataFabricacao: todayISO(),
         dataValidade: ''
       };
+      const dataFabInicial = prod.dataFabricacao || todayISO();
+      const dataValInicial = prod.dataValidade || addDays(dataFabInicial, DIAS_VALIDADE_PADRAO);
 
       const content = `
         <div class="modal-backdrop" onclick="fecharModal(event)">
@@ -1902,11 +1954,11 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
               <div class="field-row">
                 <div class="field">
                   <label>Data Fabricação</label>
-                  <input type="date" id="prodDataFab" class="input" value="${prod.dataFabricacao || todayISO()}">
+                  <input type="date" id="prodDataFab" class="input" value="${dataFabInicial}" oninput="atualizarValidadeProducao()">
                 </div>
                 <div class="field">
                   <label>Data Validade</label>
-                  <input type="date" id="prodDataVal" class="input" value="${prod.dataValidade || ''}">
+                  <input type="date" id="prodDataVal" class="input" value="${dataValInicial}">
                 </div>
               </div>
             </div>
@@ -2068,49 +2120,351 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     }
 
     // Módulo Bipagem
+    const TIPO_BIP_LABELS = {
+      venda: 'Venda Avulsa',
+      doacao: 'Doação',
+      perda: 'Perda / Avaria'
+    };
+
     function viewBipagem() {
       return `
         <div class="card card-pad scan-box">
           <h2>Saída Rápida por Bipagem</h2>
-          <p class="hint">Digite o código da etiqueta ou use o leitor de QR Code para dar baixa automática.</p>
-          <div style="max-width:320px;margin:20px auto;">
-            <input type="text" id="bipInput" class="input scan-input" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)">
+          <p class="hint">Escaneie o QR Code da etiqueta com a câmera ou digite/leia o código com um leitor físico.</p>
+
+          <div class="field" style="max-width:320px;margin:18px auto 0;text-align:left;">
+            <label>Tipo de Operação</label>
+            <select id="bipTipo" class="input" onchange="BIPAGEM_TIPO = this.value">
+              <option value="venda" ${BIPAGEM_TIPO === 'venda' ? 'selected' : ''}>Venda Avulsa</option>
+              <option value="doacao" ${BIPAGEM_TIPO === 'doacao' ? 'selected' : ''}>Doação</option>
+              <option value="perda" ${BIPAGEM_TIPO === 'perda' ? 'selected' : ''}>Perda / Avaria</option>
+            </select>
+          </div>
+
+          <div style="max-width:320px;margin:16px auto;">
+            <input type="text" id="bipInput" class="input scan-input" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)" autocomplete="off">
+          </div>
+
+          <button class="btn btn-secondary" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">
+            ${scannerBipAtivo ? '⏹ Desativar Câmera' : '📷 Ativar Câmera'}
+          </button>
+
+          <div id="cameraReader" style="margin:18px auto 0;"></div>
+
+          <div class="divider"></div>
+          <div class="table-wrap" style="text-align:left;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data/Hora</th>
+                  <th>Código</th>
+                  <th>Tipo</th>
+                </tr>
+              </thead>
+              <tbody id="bipagemLogBody">
+                ${renderBipagemLogRows()}
+              </tbody>
+            </table>
           </div>
         </div>
       `;
+    }
+
+    function renderBipagemLogRows() {
+      const itens = (DB.scanlog || []).slice(-15).reverse();
+      if (!itens.length) return '<tr><td colspan="3" class="empty">Nenhuma bipagem registrada ainda.</td></tr>';
+      return itens.map(l => {
+        const badgeClass = l.tipo === 'perda' ? 'badge-danger' : (l.tipo === 'doacao' ? 'badge-warn' : 'badge-ok');
+        return `
+          <tr>
+            <td class="mono">${fmtDateTime(l.data)}</td>
+            <td class="mono">${esc(l.codigo)}</td>
+            <td><span class="badge ${badgeClass}">${esc(l.tipoLabel || TIPO_BIP_LABELS[l.tipo] || l.tipo)}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function atualizarBipagemUI() {
+      const tbody = document.getElementById('bipagemLogBody');
+      if (tbody) {
+        tbody.innerHTML = renderBipagemLogRows();
+      }
+    }
+
+    function processarBipagemCodigo(codigoBruto) {
+      const codigo = (codigoBruto || '').trim();
+      if (!codigo) return;
+
+      const achado = findItemByCode(codigo);
+      if (!achado) {
+        toast('Código não encontrado: ' + codigo, 'err');
+        return;
+      }
+      const { producao, item } = achado;
+      if (item.status && item.status !== 'disponivel') {
+        toast('Este item já foi baixado anteriormente!', 'err');
+        return;
+      }
+      const produto = findProduto(producao.produtoId);
+      if (!produto) {
+        toast('Produto não encontrado para este item', 'err');
+        return;
+      }
+
+      const tipo = BIPAGEM_TIPO;
+      produto.estoque = Math.max(0, produto.estoque - 1);
+      item.status = tipo === 'perda' ? 'perda' : (tipo === 'doacao' ? 'doado' : 'vendido');
+
+      if (tipo === 'venda') {
+        DB.vendas.push({
+          id: uid(),
+          data: nowISO(),
+          itens: [{ produtoId: produto.id, qty: 1, preco: produto.preco }],
+          origem: 'bipagem',
+          codigo
+        });
+      }
+
+      DB.scanlog.push({
+        id: uid(),
+        data: nowISO(),
+        codigo,
+        produtoId: produto.id,
+        tipo,
+        tipoLabel: TIPO_BIP_LABELS[tipo] || tipo
+      });
+
+      persist('produtos', 'vendas', 'scanlog', 'producoes');
+      atualizarBipagemUI();
+
+      if (tipo === 'venda') {
+        toast(`Venda registrada: ${produto.nome} (${fmtMoney(produto.preco)})`, 'ok');
+      } else if (tipo === 'doacao') {
+        toast(`Doação registrada: ${produto.nome}`, 'ok');
+      } else {
+        toast(`Perda/Avaria registrada: ${produto.nome}`, 'err');
+      }
     }
 
     function processarBip(e) {
       if (e.key === 'Enter') {
         const val = e.target.value.trim();
         if (!val) return;
-        toast('Bipagem do item ' + val + ' registrada!', 'ok');
+        processarBipagemCodigo(val);
         e.target.value = '';
       }
     }
 
+    function alternarScannerBipagem() {
+      if (scannerBipAtivo) {
+        pararScannerBipagem();
+      } else {
+        iniciarScannerBipagem();
+      }
+    }
+
+    function iniciarScannerBipagem() {
+      const readerEl = document.getElementById('cameraReader');
+      const btn = document.getElementById('btnToggleScannerBip');
+      if (!readerEl || typeof Html5Qrcode === 'undefined') {
+        toast('Leitor de QR Code não disponível neste navegador', 'err');
+        return;
+      }
+      try {
+        html5QrScannerBip = new Html5Qrcode('cameraReader');
+        html5QrScannerBip.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            const agora = Date.now();
+            if (decodedText === ultimoScanCodigo && (agora - ultimoScanTempo) < 3000) return;
+            ultimoScanCodigo = decodedText;
+            ultimoScanTempo = agora;
+            processarBipagemCodigo(decodedText);
+          },
+          () => { /* ignora erros de leitura quadro a quadro */ }
+        ).then(() => {
+          scannerBipAtivo = true;
+          if (btn) btn.textContent = '⏹ Desativar Câmera';
+        }).catch((err) => {
+          toast('Não foi possível acessar a câmera: ' + err, 'err');
+        });
+      } catch (err) {
+        toast('Erro ao iniciar o leitor de QR Code', 'err');
+      }
+    }
+
+    function pararScannerBipagem() {
+      if (html5QrScannerBip) {
+        html5QrScannerBip.stop().then(() => {
+          html5QrScannerBip.clear();
+        }).catch(() => {}).finally(() => {
+          html5QrScannerBip = null;
+          scannerBipAtivo = false;
+          const btn = document.getElementById('btnToggleScannerBip');
+          if (btn) btn.textContent = '📷 Ativar Câmera';
+        });
+      } else {
+        scannerBipAtivo = false;
+      }
+    }
+
     // Módulo Etiquetas
+    function gerarQrDataUrl(texto) {
+      try {
+        const qr = qrcode(0, 'M');
+        qr.addData(String(texto));
+        qr.make();
+        return qr.createDataURL(6, 2);
+      } catch (e) {
+        console.error('Erro ao gerar QR Code', e);
+        return '';
+      }
+    }
+
     function viewEtiquetas() {
+      const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
+      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
+      const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
+        ? window.ETQ_PRODUCAO_ID
+        : (producoesComItens[producoesComItens.length - 1]?.id || '');
+      const prod = producoesComItens.find(p => p.id === producaoSelId);
+      const p = prod ? findProduto(prod.produtoId) : null;
+
+      const labelsHtml = prod ? (prod.itens || []).map((it, idx) => `
+        <div class="label-card">
+          <div class="label-eyebrow">${esc(layout.textoEyebrow || DB.config.nome)}</div>
+          <div class="label-num">${idx + 1}</div>
+          <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
+          <div class="label-row">Validade: <b>${fmtDate(prod.dataValidade)}</b></div>
+          <div class="label-qr-wrap">
+            <img src="${gerarQrDataUrl(it.codigo)}" alt="QR Code">
+          </div>
+          <div class="label-code">${esc(it.codigo)}</div>
+        </div>
+      `).join('') : '';
+
       return `
         <div class="card card-pad">
-          <h3>Impressão e Gerador de Etiquetas</h3>
-          <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+            <div>
+              <h3>Impressão e Gerador de Etiquetas</h3>
+              <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir Etiquetas</button>
+              <button class="btn btn-primary" onclick="salvarEtiquetasPDF()">📄 Salvar como PDF</button>
+            </div>
+          </div>
+
           <div class="divider"></div>
-          <div class="labels-sheet">
-            ${DB.producoes.slice(-1).map(prod => {
-              const p = findProduto(prod.produtoId);
-              return (prod.itens || []).map(it => `
-                <div class="label-card">
-                  <div class="label-eyebrow">${esc(DB.config.nome)}</div>
-                  <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
-                  <div class="label-row">Validade: <b>${fmtDate(prod.dataValidade)}</b></div>
-                  <div class="label-code">${esc(it.codigo)}</div>
-                </div>
-              `).join('');
-            }).join('') || '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>'}
+
+          ${producoesComItens.length ? `
+          <div class="field" style="max-width:360px;">
+            <label>Lote / Produção</label>
+            <select class="input" onchange="window.ETQ_PRODUCAO_ID = this.value; render();">
+              ${producoesComItens.map(pr => {
+                const prNome = (findProduto(pr.produtoId) || {}).nome || 'Produto';
+                return `<option value="${pr.id}" ${pr.id === producaoSelId ? 'selected' : ''}>${esc(prNome)} — Lote ${esc(pr.lote)} (${(pr.itens || []).length} un.)</option>`;
+              }).join('')}
+            </select>
+          </div>
+          ` : ''}
+
+          <div class="grid grid-4" style="margin:16px 0;">
+            <div class="field">
+              <label>Largura (cm)</label>
+              <input type="number" step="0.1" min="1" id="etqLargura" class="input" value="${layout.larguraCm}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Altura (cm)</label>
+              <input type="number" step="0.1" min="1" id="etqAltura" class="input" value="${layout.alturaCm}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Orientação</label>
+              <select id="etqOrientacao" class="input" onchange="atualizarLayoutEtiqueta()">
+                <option value="retrato" ${layout.orientacao !== 'paisagem' ? 'selected' : ''}>Retrato</option>
+                <option value="paisagem" ${layout.orientacao === 'paisagem' ? 'selected' : ''}>Paisagem</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>QR Code (px)</label>
+              <input type="number" step="2" min="40" id="etqQr" class="input" value="${layout.tamanhoQr}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+          </div>
+          <div class="grid grid-3" style="margin-bottom:8px;">
+            <div class="field">
+              <label>Fonte Título (cm)</label>
+              <input type="number" step="0.05" min="0.1" id="etqFonteTitulo" class="input" value="${layout.tamanhoTitulo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Fonte Corpo (cm)</label>
+              <input type="number" step="0.02" min="0.1" id="etqFonteCorpo" class="input" value="${layout.tamanhoCorpo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>Fonte Código (cm)</label>
+              <input type="number" step="0.02" min="0.1" id="etqFonteCodigo" class="input" value="${layout.tamanhoCodigo}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="labels-sheet" id="labelsSheet">
+            ${labelsHtml || '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>'}
           </div>
         </div>
       `;
+    }
+
+    function atualizarLayoutEtiqueta() {
+      const layout = DB.etiquetaLayout || (DB.etiquetaLayout = defaultEtiquetaLayout());
+      const largEl = document.getElementById('etqLargura');
+      const altEl = document.getElementById('etqAltura');
+      const oriEl = document.getElementById('etqOrientacao');
+      const qrEl = document.getElementById('etqQr');
+      const ftEl = document.getElementById('etqFonteTitulo');
+      const fcEl = document.getElementById('etqFonteCorpo');
+      const fcodEl = document.getElementById('etqFonteCodigo');
+
+      if (largEl) layout.larguraCm = parseFloat(largEl.value) || layout.larguraCm;
+      if (altEl) layout.alturaCm = parseFloat(altEl.value) || layout.alturaCm;
+      if (oriEl) layout.orientacao = oriEl.value;
+      if (qrEl) layout.tamanhoQr = parseFloat(qrEl.value) || layout.tamanhoQr;
+      if (ftEl) layout.tamanhoTitulo = parseFloat(ftEl.value) || layout.tamanhoTitulo;
+      if (fcEl) layout.tamanhoCorpo = parseFloat(fcEl.value) || layout.tamanhoCorpo;
+      if (fcodEl) layout.tamanhoCodigo = parseFloat(fcodEl.value) || layout.tamanhoCodigo;
+
+      aplicarLayoutEtiquetaCSS();
+      persist('etiquetaLayout');
+    }
+
+    window.aplicarLayoutEtiquetaCSS = function aplicarLayoutEtiquetaCSS() {
+      const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
+      const root = document.documentElement;
+      const bruto1 = Number(layout.larguraCm) || 9;
+      const bruto2 = Number(layout.alturaCm) || 6;
+      const maior = Math.max(bruto1, bruto2);
+      const menor = Math.min(bruto1, bruto2);
+      const largura = layout.orientacao === 'paisagem' ? maior : menor;
+      const altura = layout.orientacao === 'paisagem' ? menor : maior;
+
+      root.style.setProperty('--lbl-w', largura + 'cm');
+      root.style.setProperty('--lbl-min-h', altura + 'cm');
+      root.style.setProperty('--lbl-size-title', (layout.tamanhoTitulo || 0.5) + 'cm');
+      root.style.setProperty('--lbl-size-body', (layout.tamanhoCorpo || 0.3) + 'cm');
+      root.style.setProperty('--lbl-size-code', (layout.tamanhoCodigo || 0.25) + 'cm');
+      root.style.setProperty('--lbl-qr-size', (layout.tamanhoQr || 76) + 'px');
+      root.style.setProperty('--etq-page-w', largura + 'cm');
+      root.style.setProperty('--etq-page-h', altura + 'cm');
+    };
+
+    function salvarEtiquetasPDF() {
+      document.body.classList.add('etq-export-pdf');
+      toast('Na janela de impressão, selecione "Salvar como PDF" como destino.', 'ok');
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => document.body.classList.remove('etq-export-pdf'), 600);
+      }, 200);
     }
 
     // Módulo Relatórios
