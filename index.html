@@ -44,6 +44,11 @@ const db = getFirestore(app);
 const rtdb = getDatabase(app);
 
 window.firebaseAuth = auth;
+window.db = db;
+window.getDoc = getDoc;
+window.doc = doc;
+window.setDoc = setDoc;
+window.serverTimestamp = serverTimestamp;
 
 // Funções globais de Autenticação
 window.fazerLogin = async (email, senha) => {
@@ -1337,7 +1342,7 @@ ${baseConfig.cuidados}
 
   async function loadKey(key, fallback) {
   try {
-    const snap = await getDoc(doc(db, 'erp_data', key));
+    const snap = await window.getDoc(window.doc(window.db, 'erp_data', key));
     if (snap.exists() && snap.data().dados != null) {
       const dados = snap.data().dados;
       localStorage.setItem('docemg_' + key, JSON.stringify(dados));
@@ -1357,9 +1362,9 @@ ${baseConfig.cuidados}
 async function saveKey(key, value) {
   try {
     localStorage.setItem('docemg_' + key, JSON.stringify(value));
-    await setDoc(doc(db, 'erp_data', key), {
+    await window.setDoc(window.doc(window.db, 'erp_data', key), {
       dados: value,
-      atualizadoEm: serverTimestamp()
+      atualizadoEm: window.serverTimestamp()
     }, { merge: true });
   } catch (e) {
     toast('Erro ao salvar dados', 'err');
