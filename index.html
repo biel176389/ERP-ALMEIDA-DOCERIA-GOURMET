@@ -26,7 +26,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getdock, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
 const firebaseConfig = {
@@ -1322,36 +1322,42 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       return { insumos, produtos };
     }
 
-    async function loadKey(key, fallback) {
-      try {
-        if (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.get === 'function') {
-          const r = await window.storage.get(key, false);
-          if (r && r.value != null) return JSON.parse(r.value);
-        }
-        const local = localStorage.getItem('docemg_' + key);
-        if (local != null) return JSON.parse(local);
-        return fallback;
-      } catch (e) { return fallback; }
+   async function loadKey(key, fallback) {
+  try {
+    const snap = await getDoc(doc(db, 'erp_data', key));
+    if (snap.exists() && snap.data().dados != null) {
+      const dados = snap.data().dados;
+      localStorage.setItem('docemg_' + key, JSON.stringify(dados));
+      return dados;
     }
-
-    async function saveKey(key, value) {
-      try {
-        if (typeof window.storage !== 'undefined' && window.storage && typeof window.storage.set === 'function') {
-          await window.storage.set(key, JSON.stringify(value), false);
-        }
-        localStorage.setItem('docemg_' + key, JSON.stringify(value));
-      } catch (e) { 
-        toast('Erro ao salvar dados', 'err');
-        console.error(e); 
-      }
-    }
-
+    const local = localStorage.getItem('docemg_' + key);
+    if (local != null) return JSON.parse(local);
+    return fallback;
+  } catch (e) {
+    console.error(e);
+    const local = localStorage.getItem('docemg_' + key);
+    if (local != null) return JSON.parse(local);
+    return fallback;
+  }
+}
+async function saveKey(key, value) {
+  try {
+    localStorage.setItem('docemg_' + key, JSON.stringify(value));
+    await setDoc(doc(db, 'erp_data', key), {
+      dados: value,
+      atualizadoEm: serverTimestamp()
+    }, { merge: true });
+  } catch (e) {
+    toast('Erro ao salvar dados', 'err');
+    console.error(e);
+  }
+}
     window.loadAll = async function() {
       const seeded = seedData();
       DB.config = await loadKey('config', defaultConfig());
       DB.insumos = await loadKey('insumos', seeded.insumos);
       DB.produtos = await loadKey('produtos', seeded.produtos);
-      DB.producoes = await loadKey('producao', []);
+      DB.producoes = await loadKey('producoes', []);
       DB.vendas = await loadKey('vendas', []);
       DB.scanlog = await loadKey('scanlog', []);
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
