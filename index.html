@@ -1322,7 +1322,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       return { insumos, produtos };
     }
 
-   async function loadKey(key, fallback) {
+  async function loadKey(key, fallback) {
   try {
     const snap = await getDoc(doc(db, 'erp_data', key));
     if (snap.exists() && snap.data().dados != null) {
@@ -1335,6 +1335,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     return fallback;
   } catch (e) {
     console.error(e);
+    toast('Erro ao carregar ' + key + ': ' + e.message, 'err');
     const local = localStorage.getItem('docemg_' + key);
     if (local != null) return JSON.parse(local);
     return fallback;
