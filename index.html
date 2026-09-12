@@ -651,6 +651,14 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     border-color: var(--wine);
   }
 
+  input[type="range"].input {
+    padding: 0;
+    border: none;
+    background: transparent;
+    accent-color: var(--wine, #7a1f3d);
+    height: 28px;
+  }
+
   label {
     display: block;
     font-size: 11.5px;
@@ -833,102 +841,167 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     color: var(--ink);
   }
 
+  /* ===== Etiqueta — cabeçalho (título + N°) SEMPRE em linha própria,       */
+  /* com largura TOTAL do card disponível para o título (não mais dividida  */
+  /* com a coluna do QR). Isso é o que resolve o travamento do escalonamento */
+  /* de fonte: antes o título brigava por espaço com o bloco do QR; agora   */
+  /* ele tem 100% da largura da etiqueta menos apenas o N° ao lado.         */
   .label-card {
-    width: var(--lbl-w, 340px);
-    min-height: var(--lbl-min-h, 0);
-    border: 2px solid var(--ink);
-    border-radius: 14px;
-    padding: 16px 18px;
+    /* --lq depende SOMENTE da largura — alterar a Altura nunca redimensiona o QR.
+       Se o QR precisar de mais altura do que a Altura definida comporta, o
+       card cresce (min-height), mas o QR em si mantém tamanho estável. */
+    --lq: clamp(40px, calc(var(--lbl-w, 9cm) * 0.26), 150px);
+    position: relative;
+    width: var(--lbl-w, 9cm);
+    min-height: var(--lbl-h, 4cm);
+    box-sizing: border-box;
+    border: 2px solid #111;
+    border-radius: 12px;
+    padding: clamp(7px, calc(var(--lbl-w, 9cm) * 0.032), 16px);
     background: #fff;
-    position: relative;
-    font-family: var(--lbl-font-body, 'Manrope'), system-ui, sans-serif;
-    font-size: var(--lbl-size-body, 0.3cm);
-    break-inside: avoid;
-  }
-
-  .label-eyebrow {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--muted);
-    font-weight: 700;
-  }
-
-  .label-name {
-    font-family: var(--lbl-font-title, 'Fraunces'), serif;
-    font-size: var(--lbl-size-title, 0.5cm);
-    font-weight: 700;
-    margin-top: 1px;
-    line-height: 1.15;
-    padding-right: 34px;
-  }
-
-  .label-num {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    font-family: var(--lbl-font-title, 'Fraunces'), serif;
-    font-weight: 700;
-    font-size: 17px;
-  }
-
-  .label-row {
     display: flex;
-    gap: 16px;
-    margin-top: 9px;
-    font-size: var(--lbl-size-body, 0.32cm);
+    flex-direction: column; /* cabeçalho (título+N°) em cima, corpo (contato+QR) embaixo */
+    gap: clamp(4px, calc(var(--lbl-w, 9cm) * 0.022), 10px);
+    font-family: var(--lbl-font-body, 'Manrope'), system-ui, sans-serif;
+    color: #111;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
-  .label-row b { font-size: calc(var(--lbl-size-body, 0.32cm) + 0.03cm); }
-
-  .label-qr-wrap {
-    position: relative;
-    margin-top: 12px;
-    text-align: right;
+  /* Cabeçalho: 2 colunas via flex — título ocupa TODO o espaço livre até o N°. */
+  .label-header {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
   }
 
-  .label-qr-wrap img {
-    width: var(--lbl-qr-size, 76px);
-    height: var(--lbl-qr-size, 76px);
-    border-radius: 8px;
-    border: 1px solid var(--line);
+  /* Título — DESTAQUE REAL: nada de max-width em px fixos, max-height ou
+     overflow:hidden travando o crescimento. flex:1 faz ele tomar todo o
+     espaço horizontal livre da linha do cabeçalho (até o N°). O tamanho
+     é 100% proporcional via clamp() + --lbl-title-scale (o slider do
+     painel), podendo passar de 200% sem ser limitado pelo container. */
+  .label-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--lbl-font-title, 'Fraunces'), serif;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 4px;
+    font-size: clamp(1rem, calc(var(--lbl-w, 9cm) * 0.095 * var(--lbl-title-scale, 1)), 3.4rem);
+    white-space: normal; /* pode quebrar para a 2ª linha em vez de ser espremido */
+    overflow-wrap: break-word;
+  }
+
+  /* N° — coluna direita do cabeçalho, sempre visível por inteiro (nowrap),
+     acompanhando o título na mesma linha (extrema direita superior real). */
+  .label-num {
+    flex: 0 0 auto;
+    font-family: var(--lbl-font-title, 'Fraunces'), serif;
+    font-weight: 800;
+    white-space: nowrap;
+    padding-left: 8px;
+    font-size: clamp(11px, calc(var(--lbl-w, 9cm) * 0.058), 30px);
+    line-height: 1.1;
+  }
+
+  /* Corpo: lote/contato à esquerda + bloco do QR à direita (ou empilhados
+     na orientação vertical) — completamente independente do cabeçalho. */
+  .label-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: clamp(6px, calc(var(--lbl-w, 9cm) * 0.035), 18px);
+  }
+
+  .label-card.orient-vertical .label-body {
+    flex-direction: column;
+  }
+
+  .label-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: clamp(2px, calc(var(--lbl-w, 9cm) * 0.014), 6px);
+  }
+
+  .label-lote {
+    font-size: clamp(7px, calc(var(--lbl-w, 9cm) * 0.030), 14px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .label-lote b { font-weight: 800; }
+
+  .label-contact-title {
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    font-size: clamp(6.5px, calc(var(--lbl-w, 9cm) * 0.028), 13px);
+    margin-top: 2px;
+  }
+
+  .label-contact-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: clamp(6.5px, calc(var(--lbl-w, 9cm) * 0.028), 13px);
+    line-height: 1.3;
+  }
+
+  .label-contact-line .ico {
+    font-size: 1.05em;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  /* Bloco QR + SKU — sempre alinhado com a BASE da etiqueta.
+     A margem "auto" no eixo relevante (cross-axis na horizontal,
+     main-axis na vertical) absorve o espaço livre e empurra o bloco
+     para o fundo do card, em qualquer orientação. */
+  .label-qr-block {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: auto;
+  }
+
+  .label-card.orient-vertical .label-qr-block {
+    width: 100%;
+  }
+
+  .label-qr-frame {
+    border: 1.5px solid #111;
+    border-radius: 9px;
+    padding: clamp(2px, calc(var(--lq) * 0.04), 6px);
+    background: #fff;
+    line-height: 0;
+  }
+
+  .label-qr-frame img {
+    display: block;
+    width: var(--lq);
+    height: var(--lq);
   }
 
   .label-code {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: var(--lbl-size-code, 0.25cm);
-    margin-top: 3px;
-    color: var(--muted);
-  }
-
-  .label-care {
-    font-size: var(--lbl-size-body, 0.3cm);
-    margin-top: 10px;
-    line-height: 1.5;
-  }
-
-  .label-care b {
-    display: block;
-    font-size: calc(var(--lbl-size-body, 0.3cm) + 0.015cm);
-    margin-bottom: 3px;
-  }
-
-  .label-contact {
-    font-size: var(--lbl-size-body, 0.3cm);
-    margin-top: 9px;
-    line-height: 1.6;
-  }
-
-  .label-contact b {
-    display: block;
-    font-size: var(--lbl-size-body, 0.3cm);
-    margin-bottom: 2px;
+    font-size: clamp(6px, calc(var(--lq) * 0.11), 12px);
+    color: #222;
+    text-align: center;
+    white-space: nowrap;
   }
 
   .labels-sheet {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: var(--lbl-gap, 3mm);
   }
 
   @media print {
@@ -943,7 +1016,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       padding: 0;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: var(--lbl-gap, 3mm);
     }
     .label-card {
       box-shadow: none;
@@ -1272,23 +1345,16 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     };
 
     function defaultEtiquetaLayout() {
+      const cfg = (typeof DB !== 'undefined' && DB.config) || {};
       return {
         larguraCm: 9,
-        alturaCm: 6,
-        alturaAuto: true,
-        orientacao: 'retrato',
-        fonteTitulo: 'Fraunces',
-        fonteCorpo: 'Manrope',
-        tamanhoTitulo: 0.5,
-        tamanhoCorpo: 0.3,
-        tamanhoCodigo: 0.25,
-        tamanhoQr: 76,
-        mostrarPeso: true,
-        mostrarCuidados: true,
-        mostrarContato: true,
-        textoEyebrow: 'Descrição do produto',
-        textoCuidadosTitulo: '⚠ Cuidados & Conservação',
-        textoContatoTitulo: 'Atendimento / Vendas',
+        alturaCm: 4,
+        orientacao: 'horizontal', // 'horizontal' (QR ao lado) | 'vertical' (QR abaixo)
+        gapMm: 3,
+        tituloScale: 1, // multiplicador manual fino do slider (o ajuste automático faz o grosso do trabalho)
+        whatsapp: cfg.whatsapp || '(32) 98448-1635',
+        instagram: cfg.instagram || 'almeidadocergourmet',
+        textoContatoTitulo: 'ATENDIMENTO / VENDAS',
       };
     }
 function defaultConfig() {
@@ -2341,11 +2407,55 @@ async function saveKey(key, value) {
         const qr = qrcode(0, 'M');
         qr.addData(String(texto));
         qr.make();
-        return qr.createDataURL(6, 2);
+        // cell=8/margin=2 gera um PNG de maior resolução; a exibição é controlada
+        // via CSS (--lq), então o QR permanece nítido em qualquer tamanho de etiqueta.
+        return qr.createDataURL(8, 2);
       } catch (e) {
         console.error('Erro ao gerar QR Code', e);
         return '';
       }
+    }
+
+    // Gera o HTML das etiquetas da produção selecionada, aplicando o layout atual
+    // (whatsapp/instagram, orientação). É reaproveitada tanto no render inicial
+    // quanto nas atualizações ao vivo do painel, sem redesenhar os campos do formulário.
+    function renderLabelsSheetHtml() {
+      const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
+      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
+      const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
+        ? window.ETQ_PRODUCAO_ID
+        : (producoesComItens[producoesComItens.length - 1]?.id || '');
+      const prod = producoesComItens.find(p => p.id === producaoSelId);
+      const p = prod ? findProduto(prod.produtoId) : null;
+      const orientClass = layout.orientacao === 'vertical' ? 'orient-vertical' : 'orient-horizontal';
+      const whats = layout.whatsapp || DB.config.whatsapp || '';
+      const insta = layout.instagram || DB.config.instagram || '';
+
+      if (!prod) return '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>';
+
+      return (prod.itens || []).map((it, idx) => `
+        <div class="label-card ${orientClass}">
+          <div class="label-header">
+            <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
+            <div class="label-num">N°${idx + 1}</div>
+          </div>
+          <div class="label-body">
+            <div class="label-main">
+              <div class="label-lote">
+                <span>LOTE: <b>${esc(prod.lote || '')}</b></span>
+                <span>VAL: <b>${fmtDate(prod.dataValidade)}</b></span>
+              </div>
+              <div class="label-contact-title">${esc(layout.textoContatoTitulo || 'ATENDIMENTO / VENDAS')}</div>
+              <div class="label-contact-line"><span class="ico">📱</span> WhatsApp: ${esc(whats)}</div>
+              <div class="label-contact-line"><span class="ico">📷</span> Instagram: ${esc(insta)}</div>
+            </div>
+            <div class="label-qr-block">
+              <div class="label-qr-frame"><img src="${gerarQrDataUrl(it.codigo)}" alt="QR Code"></div>
+              <div class="label-code">${esc(it.codigo)}</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
     }
 
     function viewEtiquetas() {
@@ -2354,21 +2464,6 @@ async function saveKey(key, value) {
       const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
         ? window.ETQ_PRODUCAO_ID
         : (producoesComItens[producoesComItens.length - 1]?.id || '');
-      const prod = producoesComItens.find(p => p.id === producaoSelId);
-      const p = prod ? findProduto(prod.produtoId) : null;
-
-      const labelsHtml = prod ? (prod.itens || []).map((it, idx) => `
-        <div class="label-card">
-          <div class="label-eyebrow">${esc(layout.textoEyebrow || DB.config.nome)}</div>
-          <div class="label-num">${idx + 1}</div>
-          <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
-          <div class="label-row">Validade: <b>${fmtDate(prod.dataValidade)}</b></div>
-          <div class="label-qr-wrap">
-            <img src="${gerarQrDataUrl(it.codigo)}" alt="QR Code">
-          </div>
-          <div class="label-code">${esc(it.codigo)}</div>
-        </div>
-      `).join('') : '';
 
       return `
         <div class="card card-pad">
@@ -2397,7 +2492,16 @@ async function saveKey(key, value) {
           </div>
           ` : ''}
 
+          <!-- ===== Painel de Ferramentas Dinâmicas de Etiqueta ===== -->
           <div class="grid grid-4" style="margin:16px 0;">
+            <div class="field">
+              <label>📱 WhatsApp</label>
+              <input type="text" id="etqWhats" class="input" value="${esc(layout.whatsapp || DB.config.whatsapp || '')}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field">
+              <label>📷 Instagram</label>
+              <input type="text" id="etqInsta" class="input" value="${esc(layout.instagram || DB.config.instagram || '')}" oninput="atualizarLayoutEtiqueta()">
+            </div>
             <div class="field">
               <label>Largura (cm)</label>
               <input type="number" step="0.1" min="1" id="etqLargura" class="input" value="${layout.larguraCm}" oninput="atualizarLayoutEtiqueta()">
@@ -2406,36 +2510,29 @@ async function saveKey(key, value) {
               <label>Altura (cm)</label>
               <input type="number" step="0.1" min="1" id="etqAltura" class="input" value="${layout.alturaCm}" oninput="atualizarLayoutEtiqueta()">
             </div>
+          </div>
+          <div class="grid grid-4" style="margin-bottom:8px;">
             <div class="field">
-              <label>Orientação</label>
+              <label>Orientação do conteúdo</label>
               <select id="etqOrientacao" class="input" onchange="atualizarLayoutEtiqueta()">
-                <option value="retrato" ${layout.orientacao !== 'paisagem' ? 'selected' : ''}>Retrato</option>
-                <option value="paisagem" ${layout.orientacao === 'paisagem' ? 'selected' : ''}>Paisagem</option>
+                <option value="horizontal" ${layout.orientacao !== 'vertical' ? 'selected' : ''}>Horizontal (QR ao lado)</option>
+                <option value="vertical" ${layout.orientacao === 'vertical' ? 'selected' : ''}>Vertical (QR abaixo)</option>
               </select>
             </div>
             <div class="field">
-              <label>QR Code (px)</label>
-              <input type="number" step="2" min="40" id="etqQr" class="input" value="${layout.tamanhoQr}" oninput="atualizarLayoutEtiqueta()">
+              <label>Espaçamento: <b id="etqGapVal">${layout.gapMm}mm</b></label>
+              <input type="range" min="0" max="15" step="0.5" id="etqGap" class="input" value="${layout.gapMm}" oninput="atualizarLayoutEtiqueta()">
+            </div>
+            <div class="field" style="grid-column: span 2;">
+              <label>Fonte do título (ajuste fino): <b id="etqTituloVal">${Math.round((layout.tituloScale || 1) * 100)}%</b></label>
+              <input type="range" min="0.6" max="2.2" step="0.05" id="etqTituloScale" class="input" value="${layout.tituloScale || 1}" oninput="atualizarLayoutEtiqueta()">
             </div>
           </div>
-          <div class="grid grid-3" style="margin-bottom:8px;">
-            <div class="field">
-              <label>Fonte Título (cm)</label>
-              <input type="number" step="0.05" min="0.1" id="etqFonteTitulo" class="input" value="${layout.tamanhoTitulo}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field">
-              <label>Fonte Corpo (cm)</label>
-              <input type="number" step="0.02" min="0.1" id="etqFonteCorpo" class="input" value="${layout.tamanhoCorpo}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field">
-              <label>Fonte Código (cm)</label>
-              <input type="number" step="0.02" min="0.1" id="etqFonteCodigo" class="input" value="${layout.tamanhoCodigo}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-          </div>
+          <p class="hint" style="margin-top:-4px;">O título ocupa toda a largura livre da etiqueta (até o N°) e cresce de verdade conforme o ajuste fino — nomes muito longos quebram para a 2ª linha em vez de serem espremidos. O QR Code mantém tamanho estável e não é afetado pela Altura — apenas pela Largura.</p>
 
           <div class="divider"></div>
           <div class="labels-sheet" id="labelsSheet">
-            ${labelsHtml || '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>'}
+            ${renderLabelsSheetHtml()}
           </div>
         </div>
       `;
@@ -2446,42 +2543,69 @@ async function saveKey(key, value) {
       const largEl = document.getElementById('etqLargura');
       const altEl = document.getElementById('etqAltura');
       const oriEl = document.getElementById('etqOrientacao');
-      const qrEl = document.getElementById('etqQr');
-      const ftEl = document.getElementById('etqFonteTitulo');
-      const fcEl = document.getElementById('etqFonteCorpo');
-      const fcodEl = document.getElementById('etqFonteCodigo');
+      const gapEl = document.getElementById('etqGap');
+      const whatsEl = document.getElementById('etqWhats');
+      const instaEl = document.getElementById('etqInsta');
+      const tituloEl = document.getElementById('etqTituloScale');
 
       if (largEl) layout.larguraCm = parseFloat(largEl.value) || layout.larguraCm;
       if (altEl) layout.alturaCm = parseFloat(altEl.value) || layout.alturaCm;
       if (oriEl) layout.orientacao = oriEl.value;
-      if (qrEl) layout.tamanhoQr = parseFloat(qrEl.value) || layout.tamanhoQr;
-      if (ftEl) layout.tamanhoTitulo = parseFloat(ftEl.value) || layout.tamanhoTitulo;
-      if (fcEl) layout.tamanhoCorpo = parseFloat(fcEl.value) || layout.tamanhoCorpo;
-      if (fcodEl) layout.tamanhoCodigo = parseFloat(fcodEl.value) || layout.tamanhoCodigo;
+      if (gapEl) layout.gapMm = parseFloat(gapEl.value);
+      if (whatsEl) layout.whatsapp = whatsEl.value;
+      if (instaEl) layout.instagram = instaEl.value;
+      if (tituloEl) layout.tituloScale = parseFloat(tituloEl.value) || 1;
+
+      const gapValEl = document.getElementById('etqGapVal');
+      if (gapValEl) gapValEl.textContent = (layout.gapMm || 0) + 'mm';
+      const tituloValEl = document.getElementById('etqTituloVal');
+      if (tituloValEl) tituloValEl.textContent = Math.round((layout.tituloScale || 1) * 100) + '%';
 
       aplicarLayoutEtiquetaCSS();
+      // Re-renderiza somente a folha de etiquetas (mantém o foco nos campos do painel)
+      const sheetEl = document.getElementById('labelsSheet');
+      if (sheetEl) sheetEl.innerHTML = renderLabelsSheetHtml();
+      ajustarFonteTitulo();
+
       persist('etiquetaLayout');
     }
 
     window.aplicarLayoutEtiquetaCSS = function aplicarLayoutEtiquetaCSS() {
       const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
       const root = document.documentElement;
-      const bruto1 = Number(layout.larguraCm) || 9;
-      const bruto2 = Number(layout.alturaCm) || 6;
-      const maior = Math.max(bruto1, bruto2);
-      const menor = Math.min(bruto1, bruto2);
-      const largura = layout.orientacao === 'paisagem' ? maior : menor;
-      const altura = layout.orientacao === 'paisagem' ? menor : maior;
+      const largura = Number(layout.larguraCm) || 9;
+      const altura = Number(layout.alturaCm) || 4;
 
       root.style.setProperty('--lbl-w', largura + 'cm');
-      root.style.setProperty('--lbl-min-h', altura + 'cm');
-      root.style.setProperty('--lbl-size-title', (layout.tamanhoTitulo || 0.5) + 'cm');
-      root.style.setProperty('--lbl-size-body', (layout.tamanhoCorpo || 0.3) + 'cm');
-      root.style.setProperty('--lbl-size-code', (layout.tamanhoCodigo || 0.25) + 'cm');
-      root.style.setProperty('--lbl-qr-size', (layout.tamanhoQr || 76) + 'px');
+      root.style.setProperty('--lbl-h', altura + 'cm');
+      root.style.setProperty('--lbl-gap', (layout.gapMm != null ? layout.gapMm : 3) + 'mm');
+      root.style.setProperty('--lbl-title-scale', layout.tituloScale || 1);
       root.style.setProperty('--etq-page-w', largura + 'cm');
       root.style.setProperty('--etq-page-h', altura + 'cm');
+
+      // O tamanho do título já é 100% resolvido pelo CSS via --lbl-title-scale
+      // (clamp em .label-name). ajustarFonteTitulo() só limpa font-size/white-space
+      // inline que possam ter ficado de uma versão anterior — não reduz mais nada.
+      ajustarFonteTitulo();
     };
+
+    // IMPORTANTE: esta função NÃO reduz mais o font-size do título.
+    // Antes ela forçava white-space:nowrap e ficava encolhendo a fonte via
+    // JS até caber em 1 linha — isso é o que cancelava o ajuste manual do
+    // slider (por isso 160%+ "não fazia efeito" em nomes mais longos).
+    // Agora o tamanho é 100% controlado pelo CSS (.label-name, via
+    // clamp() + --lbl-title-scale) e o próprio CSS já permite quebra de
+    // linha (white-space: normal) para nomes longos, sem depender de JS.
+    // A função é mantida apenas por compatibilidade com as chamadas
+    // existentes (aplicarLayoutEtiquetaCSS / atualizarLayoutEtiqueta) e
+    // apenas garante que nenhum font-size inline antigo fique "preso".
+    function ajustarFonteTitulo() {
+      document.querySelectorAll('.label-card .label-name').forEach(el => {
+        el.style.fontSize = '';
+        el.style.whiteSpace = '';
+      });
+    }
+    window.ajustarFonteTitulo = ajustarFonteTitulo;
 
     function salvarEtiquetasPDF() {
       document.body.classList.add('etq-export-pdf');
