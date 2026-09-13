@@ -1607,28 +1607,53 @@ async function saveKey(key, value) {
       }, 0);
     }
 
+    // Retorna a data da venda no formato YYYY-MM-DD. v.data é gravado como um
+    // timestamp ISO completo (nowISO(), ex: "2026-09-12T19:30:00.000Z"), então
+    // comparar v.data === '2026-09-12' direto NUNCA bate (por isso "itens
+    // vendidos hoje" e o gráfico de 14 dias apareciam zerados). Este helper
+    // corta só a parte da data para as comparações do painel.
+    function vendaDia(v) { return (v.data || '').slice(0, 10); }
+
+    let DASH_PERIOD = 14;
+
+    function setDashPeriod(n) {
+      DASH_PERIOD = n;
+      render();
+    }
+
     function viewDashboard() {
       const hoje = todayISO();
       const mesRef = hoje.slice(0, 7);
-      const vendasMes = DB.vendas.filter(v => v.data.slice(0, 7) === mesRef);
+      const vendasMes = DB.vendas.filter(v => vendaDia(v).slice(0, 7) === mesRef);
       const faturamentoMes = vendasMes.reduce((s, v) => s + vendasFaturamento(v), 0);
       const custoMes = vendasMes.reduce((s, v) => s + vendaCusto(v), 0);
       const lucroMes = faturamentoMes - custoMes;
-      const vendasHoje = DB.vendas.filter(v => v.data === hoje);
+      const vendasHoje = DB.vendas.filter(v => vendaDia(v) === hoje);
       const itensHoje = vendasHoje.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.qty, 0), 0);
       const lowInsumos = DB.insumos.filter(insumoLowStock).length;
       const lowProdutos = DB.produtos.filter(produtoLowStock).length;
 
-      const days = periodDays(14);
+      const periodos = [7, 14, 30, 90];
+      const days = periodDays(DASH_PERIOD);
       const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
-      const dayTotals = days.map(d => DB.vendas.filter(v => v.data === d).reduce((s, v) => s + vendasFaturamento(v), 0));
+      const vendasPorDia = days.map(d => DB.vendas.filter(v => vendaDia(v) === d));
+      const dayTotals = vendasPorDia.map(lista => lista.reduce((s, v) => s + vendasFaturamento(v), 0));
+      const dayCustos = vendasPorDia.map(lista => lista.reduce((s, v) => s + vendaCusto(v), 0));
+      const dayLucros = dayTotals.map((t, i) => t - dayCustos[i]);
+      const dayTicket = vendasPorDia.map((lista, i) => lista.length ? dayTotals[i] / lista.length : 0);
+      const dayMargem = dayTotals.map((t, i) => t > 0 ? (dayLucros[i] / t) * 100 : 0);
+      const temVendasPeriodo = dayTotals.some(v => v > 0);
+
+      const vendasPeriodoFlat = vendasPorDia.flat();
+      const vendasBipagem = vendasPeriodoFlat.filter(v => v.origem === 'bipagem').length;
+      const vendasManual = vendasPeriodoFlat.length - vendasBipagem;
 
       const porProduto = {};
       DB.vendas.forEach(v => v.itens.forEach(it => { porProduto[it.produtoId] = (porProduto[it.produtoId] || 0) + it.qty; }));
       const topProdutos = Object.entries(porProduto).sort((a, b) => b[1] - a[1]).slice(0, 5)
         .map(([id, qty]) => ({ nome: (findProduto(id) || {}).nome || '—', qty }));
 
-      window.__dash = { dayLabels, dayTotals, topProdutos };
+      window.__dash = { dayLabels, dayTotals, dayCustos, dayLucros, dayTicket, dayMargem, topProdutos, vendasManual, vendasBipagem };
 
       return `
       <div class="grid grid-4">
@@ -1640,12 +1665,39 @@ async function saveKey(key, value) {
 
       <div class="grid grid-2" style="margin-top:16px;">
         <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento — últimos 14 dias</h3>
-          <div class="chart-wrap"><canvas id="chartFat"></canvas></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+            <h3 style="font-size:15px;margin:0;">Faturamento — últimos ${DASH_PERIOD} dias</h3>
+            <div class="pill-tabs">
+              ${periodos.map(p => `<button class="pill-tab ${p === DASH_PERIOD ? 'active' : ''}" onclick="setDashPeriod(${p})">${p}d</button>`).join('')}
+            </div>
+          </div>
+          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas para ver o faturamento aqui.')}</div>
         </div>
         <div class="card card-pad">
           <h3 style="font-size:15px;margin-bottom:12px;">Produtos mais vendidos</h3>
           <div class="chart-wrap">${topProdutos.length? '<canvas id="chartTop"></canvas>' : emptyBlock('Sem vendas ainda','Registre vendas para ver o ranking aqui.')}</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:16px;">
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento x Custo x Lucro (${DASH_PERIOD} dias)</h3>
+          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para comparar faturamento, custo e lucro.')}</div>
+        </div>
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Margem de lucro % (${DASH_PERIOD} dias)</h3>
+          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular a margem.')}</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:16px;">
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Ticket médio (${DASH_PERIOD} dias)</h3>
+          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular o ticket médio.')}</div>
+        </div>
+        <div class="card card-pad">
+          <h3 style="font-size:15px;margin-bottom:12px;">Vendas por origem (${DASH_PERIOD} dias)</h3>
+          <div class="chart-wrap sm">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas manuais ou por bipagem.')}</div>
         </div>
       </div>
       `;
@@ -1655,27 +1707,87 @@ async function saveKey(key, value) {
       return `<div class="empty" style="height:100%;display:flex;flex-direction:column;justify-content:center;"><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
     }
 
-    let chartFatInstance = null, chartTopInstance = null;
+    let dashChartInstances = {};
+
+    function destroyDashChart(key) {
+      if (dashChartInstances[key]) { dashChartInstances[key].destroy(); dashChartInstances[key] = null; }
+    }
 
     function renderDashCharts() {
       const dash = window.__dash;
       if (!dash) return;
+
       const fatCanvas = document.getElementById('chartFat');
       if (fatCanvas) {
-        if (chartFatInstance) chartFatInstance.destroy();
-        chartFatInstance = new Chart(fatCanvas, {
+        destroyDashChart('fat');
+        dashChartInstances.fat = new Chart(fatCanvas, {
           type: 'line',
           data: { labels: dash.dayLabels, datasets: [{ data: dash.dayTotals, borderColor: '#8B5A3C', backgroundColor: 'rgba(139, 90, 60, .08)', fill: true, tension: .35, pointRadius: 2 }] },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => 'R$ ' + v } } } }
         });
       }
+
       const topCanvas = document.getElementById('chartTop');
       if (topCanvas) {
-        if (chartTopInstance) chartTopInstance.destroy();
-        chartTopInstance = new Chart(topCanvas, {
+        destroyDashChart('top');
+        dashChartInstances.top = new Chart(topCanvas, {
           type: 'bar',
           data: { labels: dash.topProdutos.map(p => p.nome), datasets: [{ data: dash.topProdutos.map(p => p.qty), backgroundColor: '#C29A6B', borderRadius: 6 }] },
           options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { stepSize: 1 } } } }
+        });
+      }
+
+      const fclCanvas = document.getElementById('chartFCL');
+      if (fclCanvas) {
+        destroyDashChart('fcl');
+        dashChartInstances.fcl = new Chart(fclCanvas, {
+          type: 'bar',
+          data: {
+            labels: dash.dayLabels,
+            datasets: [
+              { label: 'Faturamento', data: dash.dayTotals, backgroundColor: '#C29A6B', borderRadius: 4 },
+              { label: 'Custo', data: dash.dayCustos, backgroundColor: '#B25E4A', borderRadius: 4 },
+              { label: 'Lucro', data: dash.dayLucros, backgroundColor: '#5E8C6D', borderRadius: 4 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+            scales: { y: { ticks: { callback: v => 'R$ ' + v } } }
+          }
+        });
+      }
+
+      const margemCanvas = document.getElementById('chartMargem');
+      if (margemCanvas) {
+        destroyDashChart('margem');
+        dashChartInstances.margem = new Chart(margemCanvas, {
+          type: 'line',
+          data: { labels: dash.dayLabels, datasets: [{ data: dash.dayMargem.map(v => Number(v.toFixed(1))), borderColor: '#5E8C6D', backgroundColor: 'rgba(94, 140, 109, .1)', fill: true, tension: .35, pointRadius: 2 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => v + '%' } } } }
+        });
+      }
+
+      const ticketCanvas = document.getElementById('chartTicket');
+      if (ticketCanvas) {
+        destroyDashChart('ticket');
+        dashChartInstances.ticket = new Chart(ticketCanvas, {
+          type: 'line',
+          data: { labels: dash.dayLabels, datasets: [{ data: dash.dayTicket, borderColor: '#8B5A3C', backgroundColor: 'rgba(139, 90, 60, .08)', fill: true, tension: .35, pointRadius: 2, borderDash: [4, 3] }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => 'R$ ' + v } } } }
+        });
+      }
+
+      const origemCanvas = document.getElementById('chartOrigem');
+      if (origemCanvas) {
+        destroyDashChart('origem');
+        dashChartInstances.origem = new Chart(origemCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: ['Venda manual', 'Bipagem'],
+            datasets: [{ data: [dash.vendasManual, dash.vendasBipagem], backgroundColor: ['#C29A6B', '#8B5A3C'] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } } }
         });
       }
     }
