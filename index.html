@@ -1340,6 +1340,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       produtos: [],
       producoes: [],
       vendas: [],
+      caixa: [],
       scanlog: [],
       etiquetaLayout: {}
     };
@@ -1444,6 +1445,7 @@ async function saveKey(key, value) {
       DB.produtos = await loadKey('produtos', seeded.produtos);
       DB.producoes = await loadKey('producoes', []);
       DB.vendas = await loadKey('vendas', []);
+      DB.caixa = await loadKey('caixa', []);
       DB.scanlog = await loadKey('scanlog', []);
       DB.etiquetaLayout = await loadKey('etiquetaLayout', defaultEtiquetaLayout());
       if (window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
@@ -1500,6 +1502,7 @@ async function saveKey(key, value) {
       { id: 'produtos', label: 'Produtos', icon: iconTag },
       { id: 'producao', label: 'Produção', icon: iconBox },
       { id: 'vendas', label: 'Vendas', icon: iconCart },
+      { id: 'caixa', label: 'Fluxo de Caixa', icon: iconCash },
       { id: 'bipagem', label: 'Bipagem', icon: iconScan },
       { id: 'etiquetas', label: 'Etiquetas', icon: iconTicket },
       { id: 'relatorios', label: 'Relatórios', icon: iconChart },
@@ -1514,6 +1517,7 @@ async function saveKey(key, value) {
     function iconScan() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 1 2 2h3M21 16v3a2 2 0 0 1-2 2h-3M3 12h18"/></svg>'; }
     function iconTicket() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a1.5 1.5 0 0 0 0-3V9Z"/><path d="M9 7v10" stroke-dasharray="2 2"/></svg>'; }
     function iconChart() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V10M11 19V5M18 19v-7"/><path d="M2 21h20"/></svg>'; }
+    function iconCash() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 9h.01M18 15h.01"/></svg>'; }
     function iconGear() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.9 7.9 0 0 0 0-3l1.9-1.5-2-3.4-2.2.9a8 8 0 0 0-2.6-1.5L14 2h-4l-.5 2.3a8 8 0 0 0-2.6 1.5l-2.2-.9-2 3.4L4.6 10a7.9 7.9 0 0 0 0 3l-1.9 1.5 2 3.4 2.2-.9c.8.7 1.7 1.2 2.6 1.5L10 22h4l.5-2.3c.9-.3 1.8-.8 2.6-1.5l2.2.9 2-3.4-1.9-1.5Z"/></svg>'; }
 
     function renderNav() {
@@ -1545,6 +1549,7 @@ async function saveKey(key, value) {
       produtos: ['Produtos', 'Cadastro de itens e fichas técnicas'],
       producao: ['Produção', 'Registre lotes produzidos e gere etiquetas'],
       vendas: ['Vendas', 'Registre vendas por bipagem ou manualmente'],
+      caixa: ['Fluxo de Caixa', 'Entradas, saídas e saldo do seu negócio'],
       bipagem: ['Bipagem', 'Saída rápida de itens por QR Code'],
       etiquetas: ['Etiquetas', 'Gere e reimprima etiquetas com QR Code'],
       relatorios: ['Relatórios', 'Faturamento, consumo e desempenho'],
@@ -1561,7 +1566,7 @@ async function saveKey(key, value) {
       actions.innerHTML = '';
 
       if (ROUTE === 'dashboard') {
-        actions.innerHTML = `<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas'); toast('Dados sincronizados com sucesso!', 'ok');">💾 Salvar informações</button>`;
+        actions.innerHTML = `<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas','caixa'); toast('Dados sincronizados com sucesso!', 'ok');">💾 Salvar informações</button>`;
         c.innerHTML = viewDashboard();
         renderDashCharts();
       } 
@@ -1580,6 +1585,11 @@ async function saveKey(key, value) {
       else if (ROUTE === 'vendas') {
         actions.innerHTML = `<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`;
         c.innerHTML = viewVendas();
+      }
+      else if (ROUTE === 'caixa') {
+        actions.innerHTML = `<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`;
+        c.innerHTML = viewCaixa();
+        renderCaixaCharts();
       }
       else if (ROUTE === 'bipagem') c.innerHTML = viewBipagem();
       else if (ROUTE === 'etiquetas') c.innerHTML = viewEtiquetas();
@@ -2320,6 +2330,237 @@ async function saveKey(key, value) {
       fecharModalDirect();
       render();
       toast('Venda registrada com sucesso!', 'ok');
+    }
+
+    // Módulo Fluxo de Caixa
+    // Junta as vendas (entradas automáticas) com os lançamentos manuais
+    // (DB.caixa: despesas, aportes, outras receitas) num único extrato
+    // ordenado por data, já calculando o saldo acumulado.
+    function extratoCaixa() {
+      const lista = [];
+      DB.vendas.forEach(v => {
+        lista.push({
+          id: 'venda-' + v.id,
+          data: vendaDia(v),
+          tipo: 'entrada',
+          categoria: 'Vendas',
+          descricao: v.itens.map(it => { const p = findProduto(it.produtoId); return it.qty + 'x ' + (p ? p.nome : '—'); }).join(', '),
+          valor: vendasFaturamento(v),
+          origem: 'venda'
+        });
+      });
+      DB.caixa.forEach(c => lista.push({ ...c, origem: 'manual' }));
+
+      lista.sort((a, b) => a.data < b.data ? -1 : (a.data > b.data ? 1 : 0));
+
+      let acc = 0;
+      lista.forEach(l => { acc += (l.tipo === 'entrada' ? l.valor : -l.valor); l.saldoAcumulado = acc; });
+      return lista;
+    }
+
+    let CAIXA_PERIOD = 30;
+
+    function setCaixaPeriod(n) {
+      CAIXA_PERIOD = n;
+      render();
+    }
+
+    function viewCaixa() {
+      const periodos = [7, 14, 30, 90];
+      const extrato = extratoCaixa();
+      const saldoTotal = extrato.length ? extrato[extrato.length - 1].saldoAcumulado : 0;
+
+      const days = periodDays(CAIXA_PERIOD);
+      const startPeriodo = days[0];
+      const saldoInicial = extrato.filter(l => l.data < startPeriodo).reduce((s, l) => s + (l.tipo === 'entrada' ? l.valor : -l.valor), 0);
+
+      const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
+      const dayEntradas = days.map(d => extrato.filter(l => l.data === d && l.tipo === 'entrada').reduce((s, l) => s + l.valor, 0));
+      const daySaidas = days.map(d => extrato.filter(l => l.data === d && l.tipo === 'saida').reduce((s, l) => s + l.valor, 0));
+      const daySaldoAcumulado = [];
+      let acc = saldoInicial;
+      days.forEach((d, i) => { acc += dayEntradas[i] - daySaidas[i]; daySaldoAcumulado.push(acc); });
+
+      const entradasPeriodo = dayEntradas.reduce((a, b) => a + b, 0);
+      const saidasPeriodo = daySaidas.reduce((a, b) => a + b, 0);
+      const saldoPeriodo = entradasPeriodo - saidasPeriodo;
+      const temMovimentoPeriodo = dayEntradas.some(v => v > 0) || daySaidas.some(v => v > 0);
+
+      window.__caixa = { dayLabels, dayEntradas, daySaidas, daySaldoAcumulado };
+
+      const linhasExtrato = extrato.filter(l => l.data >= startPeriodo).slice().reverse();
+      const rows = linhasExtrato.map(l => `
+        <tr>
+          <td><span class="mono">${fmtDate(l.data)}</span></td>
+          <td>${l.tipo === 'entrada' ? '<span class="badge badge-ok">Entrada</span>' : '<span class="badge badge-danger">Saída</span>'}</td>
+          <td>${esc(l.categoria)}</td>
+          <td>${esc(l.descricao || '—')}</td>
+          <td style="text-align:right;"><b>${l.tipo === 'entrada' ? '+ ' : '- '}${fmtMoney(l.valor)}</b></td>
+          <td style="text-align:right;" class="mono">${fmtMoney(l.saldoAcumulado)}</td>
+          <td style="text-align:right;">
+            ${l.origem === 'manual'
+              ? `<button class="icon-btn" onclick="modalCaixa('${l.id}')">✏️ Edit</button><button class="icon-btn" onclick="deletarCaixa('${l.id}')">🗑️</button>`
+              : '<span class="badge badge-muted">Venda</span>'}
+          </td>
+        </tr>
+      `).join('');
+
+      return `
+      <div class="grid grid-4">
+        <div class="card stat"><div class="label">Saldo atual</div><div class="value">${fmtMoney(saldoTotal)}</div><div class="delta">acumulado de todo o histórico</div></div>
+        <div class="card stat"><div class="label">Entradas (período)</div><div class="value">${fmtMoney(entradasPeriodo)}</div><div class="delta">últimos ${CAIXA_PERIOD} dias</div></div>
+        <div class="card stat"><div class="label">Saídas (período)</div><div class="value">${fmtMoney(saidasPeriodo)}</div><div class="delta">últimos ${CAIXA_PERIOD} dias</div></div>
+        <div class="card stat"><div class="label">Saldo do período</div><div class="value">${fmtMoney(saldoPeriodo)}</div><div class="delta ${saldoPeriodo < 0 ? 'down' : ''}">${saldoPeriodo >= 0 ? 'positivo' : 'negativo'}</div></div>
+      </div>
+
+      <div class="card card-pad" style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <h3 style="font-size:15px;margin:0;">Saldo acumulado — últimos ${CAIXA_PERIOD} dias</h3>
+          <div class="pill-tabs">
+            ${periodos.map(p => `<button class="pill-tab ${p === CAIXA_PERIOD ? 'active' : ''}" onclick="setCaixaPeriod(${p})">${p}d</button>`).join('')}
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="chartCaixaSaldo"></canvas></div>
+      </div>
+
+      <div class="card card-pad" style="margin-top:16px;">
+        <h3 style="font-size:15px;margin-bottom:12px;">Entradas x Saídas — últimos ${CAIXA_PERIOD} dias</h3>
+        <div class="chart-wrap">${temMovimentoPeriodo ? '<canvas id="chartCaixaFluxo"></canvas>' : emptyBlock('Sem movimentações no período', 'Registre vendas ou lançamentos para ver o gráfico.')}</div>
+      </div>
+
+      <div class="card card-pad" style="margin-top:16px;">
+        <h3 style="font-size:15px;margin-bottom:12px;">Extrato (${CAIXA_PERIOD} dias)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th>
+                <th style="text-align:right;">Valor</th><th style="text-align:right;">Saldo</th>
+                <th style="text-align:right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.length ? rows : '<tr><td colspan="7" class="empty">Nenhuma movimentação no período.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      `;
+    }
+
+    function renderCaixaCharts() {
+      const dash = window.__caixa;
+      if (!dash) return;
+
+      const saldoCanvas = document.getElementById('chartCaixaSaldo');
+      if (saldoCanvas) {
+        destroyDashChart('caixaSaldo');
+        dashChartInstances.caixaSaldo = new Chart(saldoCanvas, {
+          type: 'line',
+          data: { labels: dash.dayLabels, datasets: [{ data: dash.daySaldoAcumulado, borderColor: '#8B5A3C', backgroundColor: 'rgba(139, 90, 60, .08)', fill: true, tension: .35, pointRadius: 2 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => 'R$ ' + v } } } }
+        });
+      }
+
+      const fluxoCanvas = document.getElementById('chartCaixaFluxo');
+      if (fluxoCanvas) {
+        destroyDashChart('caixaFluxo');
+        dashChartInstances.caixaFluxo = new Chart(fluxoCanvas, {
+          type: 'bar',
+          data: {
+            labels: dash.dayLabels,
+            datasets: [
+              { label: 'Entradas', data: dash.dayEntradas, backgroundColor: '#5E8C6D', borderRadius: 4 },
+              { label: 'Saídas', data: dash.daySaidas.map(v => -v), backgroundColor: '#B25E4A', borderRadius: 4 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+            scales: { y: { ticks: { callback: v => 'R$ ' + v } } }
+          }
+        });
+      }
+    }
+
+    function modalCaixa(id = null) {
+      const lanc = DB.caixa.find(c => c.id === id) || { data: todayISO(), tipo: 'saida', categoria: '', descricao: '', valor: '' };
+      const categoriasEntrada = ['Aporte/Investimento', 'Empréstimo', 'Outras receitas'];
+      const categoriasSaida = ['Compra de insumos', 'Embalagens', 'Aluguel', 'Contas (água/luz/internet)', 'Transporte', 'Marketing', 'Retirada/Pró-labore', 'Impostos/taxas', 'Outros'];
+      const content = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal">
+            <div class="modal-head">
+              <h3>${id ? 'Editar Lançamento' : 'Novo Lançamento'}</h3>
+              <button class="modal-close" onclick="fecharModalDirect()">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>Tipo</label>
+                  <select id="caixaTipo" class="input">
+                    <option value="saida" ${lanc.tipo === 'saida' ? 'selected' : ''}>Saída (despesa)</option>
+                    <option value="entrada" ${lanc.tipo === 'entrada' ? 'selected' : ''}>Entrada (receita)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Data</label>
+                  <input type="date" id="caixaData" class="input" value="${lanc.data}">
+                </div>
+              </div>
+              <div class="field">
+                <label>Categoria</label>
+                <input type="text" id="caixaCategoria" class="input" list="caixaCategoriasList" value="${esc(lanc.categoria)}" placeholder="Ex: Compra de insumos">
+                <datalist id="caixaCategoriasList">
+                  ${[...categoriasEntrada, ...categoriasSaida].map(c => `<option value="${esc(c)}"></option>`).join('')}
+                </datalist>
+              </div>
+              <div class="field">
+                <label>Descrição (opcional)</label>
+                <input type="text" id="caixaDescricao" class="input" value="${esc(lanc.descricao || '')}">
+              </div>
+              <div class="field">
+                <label>Valor (R$)</label>
+                <input type="number" step="0.01" id="caixaValor" class="input" value="${lanc.valor}">
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="salvarCaixa('${id || ''}')">Salvar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function salvarCaixa(id) {
+      const tipo = document.getElementById('caixaTipo').value;
+      const data = document.getElementById('caixaData').value || todayISO();
+      const categoria = document.getElementById('caixaCategoria').value.trim() || (tipo === 'entrada' ? 'Outras receitas' : 'Outros');
+      const descricao = document.getElementById('caixaDescricao').value.trim();
+      const valor = parseFloat(document.getElementById('caixaValor').value) || 0;
+      if (valor <= 0) return toast('Informe um valor maior que zero', 'err');
+
+      const lanc = { id: id || uid(), tipo, data, categoria, descricao, valor };
+      if (id) {
+        const idx = DB.caixa.findIndex(c => c.id === id);
+        if (idx !== -1) DB.caixa[idx] = lanc;
+      } else {
+        DB.caixa.push(lanc);
+      }
+      persist('caixa');
+      fecharModalDirect();
+      render();
+      toast('Lançamento salvo!', 'ok');
+    }
+
+    function deletarCaixa(id) {
+      if (!confirm('Deseja excluir este lançamento?')) return;
+      DB.caixa = DB.caixa.filter(c => c.id !== id);
+      persist('caixa');
+      render();
+      toast('Lançamento removido!', 'ok');
     }
 
     // Módulo Bipagem
