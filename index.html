@@ -20,6 +20,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
@@ -52,6 +53,10 @@ window.serverTimestamp = serverTimestamp;
 // Funções globais de Autenticação
 window.fazerLogin = async (email, senha) => {
   return await signInWithEmailAndPassword(auth, email, senha);
+};
+
+window.fazerCadastro = async (email, senha) => {
+  return await createUserWithEmailAndPassword(auth, email, senha);
 };
 
 window.fazerLoginGoogle = async () => {
@@ -183,6 +188,33 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     text-transform: uppercase;
     font-family: 'IBM Plex Mono', monospace;
     margin-bottom: 24px;
+  }
+
+  .login-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .login-tab {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
+  .login-tab.active {
+    background: #fff;
+    color: var(--wine-dark);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
 
   .login-btn-google {
@@ -1156,6 +1188,11 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       <div class="brand-title">Almeida Doceria</div>
       <div class="brand-sub">Acesso ao Sistema ERP</div>
       
+      <div class="login-tabs">
+        <button class="login-tab active" id="tabEntrar" onclick="alternarAbaLogin('entrar')">Entrar</button>
+        <button class="login-tab" id="tabCadastrar" onclick="alternarAbaLogin('cadastrar')">Criar Conta</button>
+      </div>
+
       <form id="authForm" onsubmit="submeterAuth(event)">
         <div class="field" style="text-align: left;">
           <label>E-mail</label>
@@ -1216,6 +1253,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
 
   <script>
     /* ---------------- Auth UI Control ---------------- */
+    let modoAuth = 'entrar';
 
     function alternarVisibilidadeSenha() {
       const input = document.getElementById('authSenha');
@@ -1230,17 +1268,30 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       }
     }
 
+    function alternarAbaLogin(modo) {
+      modoAuth = modo;
+      document.getElementById('tabEntrar').classList.toggle('active', modo === 'entrar');
+      document.getElementById('tabCadastrar').classList.toggle('active', modo === 'cadastrar');
+      document.getElementById('btnAuthSubmit').textContent = modo === 'entrar' ? 'Entrar' : 'Cadastrar';
+    }
+
     async function submeterAuth(e) {
       e.preventDefault();
       const email = document.getElementById('authEmail').value;
       const senha = document.getElementById('authSenha').value;
 
       try {
-        await window.fazerLogin(email, senha);
-        toast('Login realizado com sucesso!', 'ok');
+        if (modoAuth === 'entrar') {
+          await window.fazerLogin(email, senha);
+          toast('Login realizado com sucesso!', 'ok');
+        } else {
+          await window.fazerCadastro(email, senha);
+          toast('Conta criada com sucesso!', 'ok');
+        }
       } catch (err) {
-        if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-          toast('E-mail ou senha inválidos.', 'err');
+        if (modoAuth === 'entrar' && (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found')) {
+          toast('Conta não cadastrada. Mudei para a aba "Criar Conta"!', 'err');
+          alternarAbaLogin('cadastrar');
         } else {
           toast('Erro de autenticação: ' + err.message, 'err');
         }
@@ -1442,8 +1493,6 @@ async function saveKey(key, value) {
     let scannerBipAtivo = false;
     let ultimoScanCodigo = '';
     let ultimoScanTempo = 0;
-    let bipModalAberto = false;
-    let BIP_PENDENTE = null;
 
     const NAV_ITEMS = [
       { id: 'dashboard', label: 'Painel', icon: iconDash },
@@ -2137,91 +2186,45 @@ async function saveKey(key, value) {
 
       if (id) {
         const prod = DB.producoes.find(p => p.id === id);
-        if (!prod) return;
-
-        // Itens já baixados (vendidos/doados/com perda) via bipagem não podem ser
-        // removidos silenciosamente — eles são o histórico real do que já saiu do estoque.
-        const itensAtuais = prod.itens || [];
-        const processados = itensAtuais.filter(it => it.status && it.status !== 'disponivel');
-
-        if (qtd < processados.length) {
-          toast(`Não é possível reduzir para ${qtd} un.: este lote já tem ${processados.length} item(ns) baixado(s) (vendido/doado/perda).`, 'err');
-          return;
+        if (prod) {
+          const diff = qtd - prod.quantidade;
+          prod.quantidade = qtd;
+          prod.produtoId = produtoId;
+          prod.dataFabricacao = dataFab;
+          prod.dataValidade = dataVal;
+          produto.estoque = Math.max(0, produto.estoque + diff);
+        }
+      } else {
+        const lote = 'L' + Date.now().toString().slice(-6);
+        const itens = [];
+        for (let i = 1; i <= qtd; i++) {
+          itens.push({
+            codigo: `${produto.sku}-${lote}-${i}`,
+            status: 'disponivel'
+          });
         }
 
-        const qtdAnterior = prod.quantidade;
-        const diff = qtd - qtdAnterior;
-        prod.produtoId = produtoId;
-        prod.dataFabricacao = dataFab;
-        prod.dataValidade = dataVal;
-        produto.estoque = Math.max(0, produto.estoque + diff);
-
-        // ---- Sincroniza os itens/etiquetas (mesmo id de produção/lote) com a nova quantidade ----
-        const disponiveis = itensAtuais.filter(it => !it.status || it.status === 'disponivel');
-        let novosItens;
-        if (qtd >= itensAtuais.length) {
-          // Aumentou: mantém todos os itens existentes e cria novos disponíveis para o restante
-          novosItens = [...itensAtuais];
-          for (let i = itensAtuais.length + 1; i <= qtd; i++) {
-            novosItens.push({ codigo: `${produto.sku}-${prod.lote}-${i}`, status: 'disponivel' });
-          }
-        } else if (qtd === 0) {
-          // Zerou a produção: remove todas as etiquetas/itens associados
-          novosItens = [];
-        } else {
-          // Reduziu: descarta o excedente apenas entre os itens ainda "disponivel"
-          const manterDisponiveis = qtd - processados.length;
-          novosItens = [...processados, ...disponiveis.slice(0, manterDisponiveis)];
+        if (DB.config.deducaoInsumos === 'producao') {
+          deduzInsumos(produto, qtd);
         }
-        prod.itens = novosItens;
-        prod.quantidade = qtd;
 
-        const jaImpressas = !!prod.etiquetasImpressas;
-        persist('produtos', 'producoes');
-        fecharModalDirect();
-        render(); // reflete a nova contagem de etiquetas assim que o módulo Etiquetas for aberto
+        produto.estoque += qtd;
 
-        if (qtd === 0) {
-          toast('Quantidade zerada: todas as etiquetas deste lote foram removidas.', 'err');
-        } else if (jaImpressas) {
-          toast(`Quantidade produzida alterada para ${qtd} un. As etiquetas deste lote já haviam sido impressas — reimprima para refletir o novo total (${novosItens.length} etiqueta${novosItens.length === 1 ? '' : 's'}).`, 'err');
-        } else {
-          toast(`Produção atualizada! Etiquetas sincronizadas: ${novosItens.length} un.`, 'ok');
-        }
-        return;
-      }
-
-      // ---- Novo registro de produção ----
-      const lote = 'L' + Date.now().toString().slice(-6);
-      const itens = [];
-      for (let i = 1; i <= qtd; i++) {
-        itens.push({
-          codigo: `${produto.sku}-${lote}-${i}`,
-          status: 'disponivel'
+        DB.producoes.push({
+          id: uid(),
+          lote,
+          produtoId,
+          quantidade: qtd,
+          dataFabricacao: dataFab,
+          dataValidade: dataVal,
+          itens
         });
       }
-
-      if (DB.config.deducaoInsumos === 'producao') {
-        deduzInsumos(produto, qtd);
-      }
-
-      produto.estoque += qtd;
-
-      DB.producoes.push({
-        id: uid(),
-        lote,
-        produtoId,
-        quantidade: qtd,
-        dataFabricacao: dataFab,
-        dataValidade: dataVal,
-        itens,
-        etiquetasImpressas: false
-      });
 
       persist('produtos', 'producoes', 'insumos');
       fecharModalDirect();
       render();
-      toast('Lote produzido com sucesso!', 'ok');
+      toast(id ? 'Produção atualizada com sucesso!' : 'Lote produzido com sucesso!', 'ok');
     }
 
     function deletarProducao(id) {
@@ -2270,29 +2273,6 @@ async function saveKey(key, value) {
     }
 
     function modalVenda() {
-      const produtosDisponiveis = DB.produtos.filter(p => (p.estoque || 0) > 0);
-      const primeiroProduto = produtosDisponiveis[0] || { preco: 0, estoque: 0 };
-
-      if (!produtosDisponiveis.length) {
-        document.getElementById('modalRoot').innerHTML = `
-          <div class="modal-backdrop" onclick="fecharModal(event)">
-            <div class="modal">
-              <div class="modal-head">
-                <h3>Nova Venda Manual</h3>
-                <button class="modal-close" onclick="fecharModalDirect()">×</button>
-              </div>
-              <div class="modal-body">
-                <p class="empty">Nenhum produto com estoque disponível para venda no momento.</p>
-              </div>
-              <div class="modal-foot">
-                <button class="btn btn-secondary" onclick="fecharModalDirect()">Fechar</button>
-              </div>
-            </div>
-          </div>
-        `;
-        return;
-      }
-
       const content = `
         <div class="modal-backdrop" onclick="fecharModal(event)">
           <div class="modal">
@@ -2303,22 +2283,14 @@ async function saveKey(key, value) {
             <div class="modal-body">
               <div class="field">
                 <label>Produto</label>
-                <select id="vendaProdutoId" class="input" onchange="atualizarPrecoVendaManual()">
-                  ${produtosDisponiveis.map(p => `<option value="${p.id}" data-preco="${p.preco}" data-estoque="${p.estoque}">${esc(p.nome)} - ${fmtMoney(p.preco)} (${p.estoque} em estoque)</option>`).join('')}
+                <select id="vendaProdutoId" class="input">
+                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
                 </select>
               </div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Quantidade</label>
-                  <input type="number" id="vendaQtd" class="input" value="1" min="1" max="${primeiroProduto.estoque}" oninput="atualizarTotalVendaManual()">
-                  <span class="hint" id="vendaEstoqueHint">Estoque disponível: ${primeiroProduto.estoque} un.</span>
-                </div>
-                <div class="field">
-                  <label>Preço Unitário (R$)</label>
-                  <input type="number" id="vendaPreco" class="input" step="0.01" min="0" value="${primeiroProduto.preco}" oninput="atualizarTotalVendaManual()">
-                </div>
+              <div class="field">
+                <label>Quantidade</label>
+                <input type="number" id="vendaQtd" class="input" value="1">
               </div>
-              <p class="hint" id="vendaTotalPreview">Total: ${fmtMoney(primeiroProduto.preco)}</p>
             </div>
             <div class="modal-foot">
               <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
@@ -2330,56 +2302,24 @@ async function saveKey(key, value) {
       document.getElementById('modalRoot').innerHTML = content;
     }
 
-    function atualizarPrecoVendaManual() {
-      const produtoId = document.getElementById('vendaProdutoId').value;
-      const produto = findProduto(produtoId);
-      const precoEl = document.getElementById('vendaPreco');
-      const qtdEl = document.getElementById('vendaQtd');
-      const estoqueHint = document.getElementById('vendaEstoqueHint');
-      if (produto && precoEl) precoEl.value = produto.preco;
-      if (produto && qtdEl) {
-        qtdEl.max = produto.estoque;
-        if ((parseInt(qtdEl.value) || 0) > produto.estoque) qtdEl.value = produto.estoque;
-      }
-      if (produto && estoqueHint) estoqueHint.textContent = `Estoque disponível: ${produto.estoque} un.`;
-      atualizarTotalVendaManual();
-    }
-
-    function atualizarTotalVendaManual() {
-      const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
-      const preco = parseFloat(document.getElementById('vendaPreco').value) || 0;
-      const totalEl = document.getElementById('vendaTotalPreview');
-      if (totalEl) totalEl.textContent = 'Total: ' + fmtMoney(qty * preco);
-    }
-
     function salvarVenda() {
       const produtoId = document.getElementById('vendaProdutoId').value;
       const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
-      const precoInput = parseFloat(document.getElementById('vendaPreco').value);
       const produto = findProduto(produtoId);
       if (!produto || qty <= 0) return toast('Quantidade inválida', 'err');
-
-      if ((produto.estoque || 0) <= 0) {
-        return toast('Produto sem estoque disponível', 'err');
-      }
-      if (qty > produto.estoque) {
-        return toast(`Estoque insuficiente: restam apenas ${produto.estoque} un. de ${produto.nome}`, 'err');
-      }
-
-      const preco = (!isNaN(precoInput) && precoInput >= 0) ? precoInput : produto.preco;
 
       produto.estoque = Math.max(0, produto.estoque - qty);
 
       DB.vendas.push({
         id: uid(),
         data: nowISO(),
-        itens: [{ produtoId, qty, preco }]
+        itens: [{ produtoId, qty, preco: produto.preco }]
       });
 
       persist('produtos', 'vendas');
       fecharModalDirect();
       render();
-      toast(`Venda registrada com sucesso! (${fmtMoney(preco)}/un.)`, 'ok');
+      toast('Venda registrada com sucesso!', 'ok');
     }
 
     // Módulo Bipagem
@@ -2458,7 +2398,6 @@ async function saveKey(key, value) {
     function processarBipagemCodigo(codigoBruto) {
       const codigo = (codigoBruto || '').trim();
       if (!codigo) return;
-      if (bipModalAberto) return; // evita reprocessar enquanto o modal de confirmação está aberto
 
       const achado = findItemByCode(codigo);
       if (!achado) {
@@ -2476,139 +2415,7 @@ async function saveKey(key, value) {
         return;
       }
 
-      // Nenhuma bipagem é confirmada automaticamente — sempre abre modal de conferência
-      // antes de dar baixa no estoque, seja venda, doação ou perda/avaria.
-      if (BIPAGEM_TIPO === 'venda' && (produto.estoque || 0) <= 0) {
-        toast('Produto sem estoque disponível', 'err');
-        return;
-      }
-
-      abrirModalConfirmacaoBipagem(codigo, produto, item, producao, BIPAGEM_TIPO);
-    }
-
-    const BIP_MODAL_CONFIG = {
-      venda:  { titulo: 'Confirmar Venda',          botao: 'Confirmar Venda',            btnClass: 'btn-primary' },
-      doacao: { titulo: 'Confirmar Doação',         botao: 'Confirmar Doação',           btnClass: 'btn-primary' },
-      perda:  { titulo: 'Confirmar Perda / Avaria', botao: 'Confirmar Perda/Avaria',     btnClass: 'btn-danger' }
-    };
-
-    function abrirModalConfirmacaoBipagem(codigo, produto, item, producao, tipo) {
-      bipModalAberto = true;
-      BIP_PENDENTE = { codigo, produto, item, producao, tipo };
-      const cfg = BIP_MODAL_CONFIG[tipo] || BIP_MODAL_CONFIG.venda;
-      const ehVenda = tipo === 'venda';
-      const peso = Number(produto.pesoMedio) || 0;
-
-      const blocoPreco = ehVenda ? `
-              <div class="field">
-                <label>Preço de Venda (R$)</label>
-                <input type="number" id="bipPrecoVenda" class="input" step="0.01" min="0" value="${produto.preco}" oninput="atualizarTotalBipagem()" onkeydown="if(event.key==='Enter'){confirmarBipagem();}">
-              </div>
-              <p class="hint" id="bipTotalPreview">Valor total: ${fmtMoney(produto.preco)}</p>
-      ` : `
-              <p class="hint">Valor de referência (tabela): <b>${fmtMoney(produto.preco)}</b> — este item não gera valor de venda.</p>
-      `;
-
-      const content = `
-        <div class="modal-backdrop" onclick="cancelarModalConfirmacaoBipagem(event)">
-          <div class="modal">
-            <div class="modal-head">
-              <h3>${cfg.titulo}</h3>
-              <button class="modal-close" onclick="cancelarModalConfirmacaoBipagemDirect()">×</button>
-            </div>
-            <div class="modal-body">
-              <p style="font-size:16px;"><b>${esc(produto.nome)}</b></p>
-              <div class="field-row">
-                <div class="field">
-                  <label>Lote</label>
-                  <p class="mono" style="margin:2px 0;">${esc(producao.lote || '—')}</p>
-                </div>
-                <div class="field">
-                  <label>Código da Etiqueta</label>
-                  <p class="mono" style="margin:2px 0;">${esc(codigo)}</p>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Fabricação</label>
-                  <p style="margin:2px 0;">${fmtDate(producao.dataFabricacao)}</p>
-                </div>
-                <div class="field">
-                  <label>Validade</label>
-                  <p style="margin:2px 0;">${fmtDate(producao.dataValidade)}</p>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Quantidade</label>
-                  <p style="margin:2px 0;">1 unidade</p>
-                </div>
-                ${peso > 0 ? `
-                <div class="field">
-                  <label>Peso aproximado</label>
-                  <p style="margin:2px 0;">${peso} kg</p>
-                </div>` : ''}
-              </div>
-              ${blocoPreco}
-            </div>
-            <div class="modal-foot">
-              <button class="btn btn-secondary" onclick="cancelarModalConfirmacaoBipagemDirect()">Cancelar</button>
-              <button class="btn ${cfg.btnClass}" onclick="confirmarBipagem()">${cfg.botao}</button>
-            </div>
-          </div>
-        </div>
-      `;
-      document.getElementById('modalRoot').innerHTML = content;
-      setTimeout(() => {
-        const inp = document.getElementById('bipPrecoVenda');
-        if (inp) { inp.focus(); inp.select(); }
-      }, 50);
-    }
-
-    function atualizarTotalBipagem() {
-      const precoEl = document.getElementById('bipPrecoVenda');
-      const totalEl = document.getElementById('bipTotalPreview');
-      if (!precoEl || !totalEl) return;
-      const preco = parseFloat(precoEl.value) || 0;
-      totalEl.textContent = 'Valor total: ' + fmtMoney(preco);
-    }
-
-    function cancelarModalConfirmacaoBipagem(e) {
-      if (e.target.classList.contains('modal-backdrop')) cancelarModalConfirmacaoBipagemDirect();
-    }
-
-    function cancelarModalConfirmacaoBipagemDirect() {
-      bipModalAberto = false;
-      BIP_PENDENTE = null;
-      document.getElementById('modalRoot').innerHTML = '';
-      // Limpa o campo de bipagem e devolve o foco para a próxima leitura, sem alterar o estoque
-      const inputBip = document.getElementById('bipInput');
-      if (inputBip) { inputBip.value = ''; inputBip.focus(); }
-      toast('Bipagem cancelada — nenhuma alteração foi feita no estoque.', 'ok');
-    }
-
-    function confirmarBipagem() {
-      if (!BIP_PENDENTE) return;
-      const { codigo, produto, item, producao, tipo } = BIP_PENDENTE;
-
-      let preco = produto.preco;
-      if (tipo === 'venda') {
-        const precoInput = parseFloat(document.getElementById('bipPrecoVenda').value);
-        preco = (!isNaN(precoInput) && precoInput >= 0) ? precoInput : produto.preco;
-      }
-
-      bipModalAberto = false;
-      BIP_PENDENTE = null;
-      document.getElementById('modalRoot').innerHTML = '';
-
-      finalizarBipagem(codigo, produto, item, producao, tipo, preco);
-
-      // Campo pronto para a próxima leitura
-      const inputBip = document.getElementById('bipInput');
-      if (inputBip) { inputBip.value = ''; inputBip.focus(); }
-    }
-
-    function finalizarBipagem(codigo, produto, item, producao, tipo, preco) {
+      const tipo = BIPAGEM_TIPO;
       produto.estoque = Math.max(0, produto.estoque - 1);
       item.status = tipo === 'perda' ? 'perda' : (tipo === 'doacao' ? 'doado' : 'vendido');
 
@@ -2616,7 +2423,7 @@ async function saveKey(key, value) {
         DB.vendas.push({
           id: uid(),
           data: nowISO(),
-          itens: [{ produtoId: produto.id, qty: 1, preco }],
+          itens: [{ produtoId: produto.id, qty: 1, preco: produto.preco }],
           origem: 'bipagem',
           codigo
         });
@@ -2635,7 +2442,7 @@ async function saveKey(key, value) {
       atualizarBipagemUI();
 
       if (tipo === 'venda') {
-        toast(`Venda registrada: ${produto.nome} (${fmtMoney(preco)})`, 'ok');
+        toast(`Venda registrada: ${produto.nome} (${fmtMoney(produto.preco)})`, 'ok');
       } else if (tipo === 'doacao') {
         toast(`Doação registrada: ${produto.nome}`, 'ok');
       } else {
@@ -2778,7 +2585,7 @@ async function saveKey(key, value) {
               <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-secondary" onclick="imprimirEtiquetas()">🖨️ Imprimir Etiquetas</button>
+              <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir Etiquetas</button>
               <button class="btn btn-primary" onclick="salvarEtiquetasPDF()">📄 Salvar como PDF</button>
             </div>
           </div>
@@ -2912,33 +2719,7 @@ async function saveKey(key, value) {
     }
     window.ajustarFonteTitulo = ajustarFonteTitulo;
 
-    // Identifica a produção/lote atualmente selecionado no painel de Etiquetas
-    // (mesmo id compartilhado entre Produção e Etiquetas: prod.id / window.ETQ_PRODUCAO_ID)
-    function getProducaoSelecionadaEtiquetas() {
-      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
-      const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
-        ? window.ETQ_PRODUCAO_ID
-        : (producoesComItens[producoesComItens.length - 1]?.id || '');
-      return producoesComItens.find(p => p.id === producaoSelId) || null;
-    }
-
-    // Marca o lote atual como "etiquetas já impressas" — usado depois para avisar
-    // o usuário caso a quantidade produzida seja editada após a impressão.
-    function marcarEtiquetasComoImpressas() {
-      const prod = getProducaoSelecionadaEtiquetas();
-      if (prod && !prod.etiquetasImpressas) {
-        prod.etiquetasImpressas = true;
-        persist('producoes');
-      }
-    }
-
-    function imprimirEtiquetas() {
-      marcarEtiquetasComoImpressas();
-      window.print();
-    }
-
     function salvarEtiquetasPDF() {
-      marcarEtiquetasComoImpressas();
       document.body.classList.add('etq-export-pdf');
       toast('Na janela de impressão, selecione "Salvar como PDF" como destino.', 'ok');
       setTimeout(() => {
