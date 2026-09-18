@@ -1315,6 +1315,8 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     const fmtDate = (iso) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return d.toLocaleDateString('pt-BR'); };
     const fmtDateTime = (iso) => { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
     const addDays = (iso, days) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0, 10); };
+    const isoToDatetimeLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); const pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const datetimeLocalToISO = (val) => { if (!val) return nowISO(); return new Date(val).toISOString(); };
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } [c]));
     const slug = (s) => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, '').slice(0, 6) || 'PRD';
 
@@ -2254,11 +2256,17 @@ async function saveKey(key, value) {
 
     // Módulo Vendas
     function viewVendas() {
-      const rows = DB.vendas.map(v => `
+      const lista = DB.vendas.slice().sort((a, b) => (a.data < b.data ? 1 : (a.data > b.data ? -1 : 0)));
+      const rows = lista.map(v => `
         <tr>
           <td><span class="mono">${fmtDateTime(v.data)}</span></td>
           <td>${v.itens.map(i => `${i.qty}x ${(findProduto(i.produtoId)||{}).nome||'—'}`).join(', ')}</td>
           <td><b>${fmtMoney(vendasFaturamento(v))}</b></td>
+          <td>${v.origem === 'bipagem' ? '<span class="badge badge-muted">Bipagem</span>' : '<span class="badge badge-muted">Manual</span>'}</td>
+          <td style="text-align:right;">
+            <button class="icon-btn" onclick="modalVenda('${v.id}')">✏️ Edit</button>
+            <button class="icon-btn" onclick="deletarVenda('${v.id}')">🗑️</button>
+          </td>
         </tr>
       `).join('');
 
@@ -2271,10 +2279,12 @@ async function saveKey(key, value) {
                   <th>Data/Hora</th>
                   <th>Itens</th>
                   <th>Total Venda</th>
+                  <th>Origem</th>
+                  <th style="text-align:right;">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows.length ? rows : '<tr><td colspan="3" class="empty">Nenhuma venda realizada.</td></tr>'}
+                ${rows.length ? rows : '<tr><td colspan="5" class="empty">Nenhuma venda realizada.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -2282,29 +2292,38 @@ async function saveKey(key, value) {
       `;
     }
 
-    function modalVenda() {
+    function modalVenda(id = null) {
+      const venda = id ? DB.vendas.find(v => v.id === id) : null;
+      const item = venda ? venda.itens[0] : null;
       const content = `
         <div class="modal-backdrop" onclick="fecharModal(event)">
           <div class="modal">
             <div class="modal-head">
-              <h3>Nova Venda Manual</h3>
+              <h3>${venda ? 'Editar Venda' : 'Nova Venda Manual'}</h3>
               <button class="modal-close" onclick="fecharModalDirect()">×</button>
             </div>
             <div class="modal-body">
+              ${venda && venda.codigo ? `<p class="hint">Vinculada ao código de etiqueta <b>${esc(venda.codigo)}</b>. Editar aqui corrige os dados da venda; para liberar o item novamente, exclua a venda em vez de editá-la.</p>` : ''}
               <div class="field">
                 <label>Produto</label>
                 <select id="vendaProdutoId" class="input">
-                  ${DB.produtos.map(p => `<option value="${p.id}">${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
+                  ${DB.produtos.map(p => `<option value="${p.id}" ${item && item.produtoId === p.id ? 'selected' : ''}>${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
                 </select>
               </div>
-              <div class="field">
-                <label>Quantidade</label>
-                <input type="number" id="vendaQtd" class="input" value="1">
+              <div class="field-row">
+                <div class="field">
+                  <label>Quantidade</label>
+                  <input type="number" id="vendaQtd" class="input" value="${item ? item.qty : 1}">
+                </div>
+                <div class="field">
+                  <label>Data/Hora</label>
+                  <input type="datetime-local" id="vendaDataHora" class="input" value="${isoToDatetimeLocal(venda ? venda.data : nowISO())}">
+                </div>
               </div>
             </div>
             <div class="modal-foot">
               <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
-              <button class="btn btn-primary" onclick="salvarVenda()">Finalizar Venda</button>
+              <button class="btn btn-primary" onclick="salvarVenda('${id || ''}')">${venda ? 'Salvar Alterações' : 'Finalizar Venda'}</button>
             </div>
           </div>
         </div>
@@ -2312,17 +2331,42 @@ async function saveKey(key, value) {
       document.getElementById('modalRoot').innerHTML = content;
     }
 
-    function salvarVenda() {
+    function salvarVenda(id) {
       const produtoId = document.getElementById('vendaProdutoId').value;
       const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
+      const dataHoraEl = document.getElementById('vendaDataHora');
       const produto = findProduto(produtoId);
       if (!produto || qty <= 0) return toast('Quantidade inválida', 'err');
+
+      if (id) {
+        const idx = DB.vendas.findIndex(v => v.id === id);
+        if (idx === -1) return toast('Venda não encontrada', 'err');
+        const vendaAntiga = DB.vendas[idx];
+        // devolve ao estoque o que a venda antiga havia deduzido, antes de aplicar os novos valores
+        vendaAntiga.itens.forEach(it => {
+          const p = findProduto(it.produtoId);
+          if (p) p.estoque = p.estoque + it.qty;
+        });
+        produto.estoque = Math.max(0, produto.estoque - qty);
+
+        DB.vendas[idx] = {
+          ...vendaAntiga,
+          data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : vendaAntiga.data,
+          itens: [{ produtoId, qty, preco: produto.preco }]
+        };
+
+        persist('produtos', 'vendas');
+        fecharModalDirect();
+        render();
+        toast('Venda atualizada com sucesso!', 'ok');
+        return;
+      }
 
       produto.estoque = Math.max(0, produto.estoque - qty);
 
       DB.vendas.push({
         id: uid(),
-        data: nowISO(),
+        data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : nowISO(),
         itens: [{ produtoId, qty, preco: produto.preco }]
       });
 
@@ -2330,6 +2374,28 @@ async function saveKey(key, value) {
       fecharModalDirect();
       render();
       toast('Venda registrada com sucesso!', 'ok');
+    }
+
+    function deletarVenda(id) {
+      const venda = DB.vendas.find(v => v.id === id);
+      if (!venda) return;
+      if (!confirm('Deseja excluir esta venda? O estoque do(s) produto(s) será devolvido.')) return;
+
+      venda.itens.forEach(it => {
+        const p = findProduto(it.produtoId);
+        if (p) p.estoque = p.estoque + it.qty;
+      });
+
+      // se a venda veio de uma bipagem, libera o item da etiqueta novamente
+      if (venda.origem === 'bipagem' && venda.codigo) {
+        const achado = findItemByCode(venda.codigo);
+        if (achado && achado.item) achado.item.status = 'disponivel';
+      }
+
+      DB.vendas = DB.vendas.filter(v => v.id !== id);
+      persist('produtos', 'vendas', 'producoes');
+      render();
+      toast('Venda excluída e estoque devolvido!', 'ok');
     }
 
     // Módulo Fluxo de Caixa
