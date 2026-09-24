@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta name="google-site-verification" content="6Sjisjhl7QsGgYaoVIBxREUND0WaB7IBOpxldeDPH1Y" />
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1480,10 +1479,12 @@ async function saveKey(key, value) {
 
     function deduzInsumos(produto, qty) {
       const out = [];
+      const rendimento = (produto.rendimento && produto.rendimento > 0) ? produto.rendimento : 1;
+      const escala = qty / rendimento; // qty = unidades produzidas nesta operação (pode ser negativo em estornos/edições)
       (produto.receita || []).forEach(r => {
         const ins = findInsumo(r.insumoId);
         if (!ins) return;
-        const amount = r.qtd * qty;
+        const amount = r.qtd * escala;
         ins.estoque = Math.round((ins.estoque - amount) * 10000) / 10000;
         out.push({ insumo: ins, deducted: amount });
       });
@@ -1937,12 +1938,14 @@ async function saveKey(key, value) {
           const ins = findInsumo(r.insumoId);
           return acc + (ins ? ins.custo * r.qtd : 0);
         }, 0);
+        const rendimento = (p.rendimento && p.rendimento > 0) ? p.rendimento : 1;
+        const custoUnit = custoFicha / rendimento;
         return `
           <tr>
             <td><b>${esc(p.nome)}</b><br><small class="mono">${esc(p.sku)}</small></td>
             <td>${esc(p.categoria || 'Geral')}</td>
             <td>${fmtMoney(p.preco)}</td>
-            <td>${fmtMoney(custoFicha)}</td>
+            <td>${fmtMoney(custoFicha)}<br><small class="mono" style="opacity:.65;">${fmtMoney(custoUnit)}/un (rende ${rendimento})</small></td>
             <td><span class="mono">${p.estoque} un</span></td>
             <td style="text-align:right;">
               <button class="icon-btn" onclick="modalProduto('${p.id}')">✏️ Edit</button>
@@ -1977,7 +1980,7 @@ async function saveKey(key, value) {
 
     function modalProduto(id = null) {
       const prod = DB.produtos.find(p => p.id === id) || {
-        nome: '', sku: '', categoria: 'Doces', preco: 0, validadeDias: 3, estoque: 0, estoqueMin: 10, pesoMedio: 0.1, receita: []
+        nome: '', sku: '', categoria: 'Doces', preco: 0, validadeDias: 3, estoque: 0, estoqueMin: 10, pesoMedio: 0.1, rendimento: 1, receita: []
       };
 
       const optionsInsumos = DB.insumos.map(i => `<option value="${i.id}">${esc(i.nome)} (${i.unidade})</option>`).join('');
@@ -2022,6 +2025,11 @@ async function saveKey(key, value) {
               </div>
               <div class="divider"></div>
               <h4>Ficha Técnica / Receita</h4>
+              <div class="field" style="margin-top:8px; max-width:260px;">
+                <label>Rendimento da receita (quantas unidades essa Ficha Técnica produz)</label>
+                <input type="number" min="1" step="1" id="prdRendimento" class="input" value="${prod.rendimento || 1}">
+              </div>
+              <p class="hint" style="margin:6px 0 4px;">Informe abaixo a quantidade de cada insumo gasta para produzir <b>o rendimento acima</b> (ex: se a receita rende 32 unidades, informe o total usado para as 32 — não é por unidade). O sistema calcula a baixa proporcional sozinho quando a produção for registrada.</p>
               <div id="recipeContainer" style="margin-top: 10px;"></div>
               <button class="btn btn-secondary btn-sm" onclick="addRecipeRow()" style="margin-top:8px;">+ Adicionar Insumo</button>
             </div>
@@ -2068,6 +2076,7 @@ async function saveKey(key, value) {
         validadeDias: parseInt(document.getElementById('prdValidade').value) || 1,
         estoque: parseFloat(document.getElementById('prdEstoque').value) || 0,
         estoqueMin: parseFloat(document.getElementById('prdEstoqueMin').value) || 0,
+        rendimento: parseInt(document.getElementById('prdRendimento').value) || 1,
         receita: window.__activeRecipe.filter(r => r.insumoId && r.qtd > 0)
       };
       if (id) {
@@ -2206,6 +2215,9 @@ async function saveKey(key, value) {
           prod.dataFabricacao = dataFab;
           prod.dataValidade = dataVal;
           produto.estoque = Math.max(0, produto.estoque + diff);
+          if (DB.config.deducaoInsumos === 'producao' && diff !== 0) {
+            deduzInsumos(produto, diff);
+          }
         }
       } else {
         const lote = 'L' + Date.now().toString().slice(-6);
