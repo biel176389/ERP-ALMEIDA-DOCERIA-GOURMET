@@ -26,7 +26,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, getDocs, query, where, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
 const firebaseConfig = {
@@ -49,6 +49,12 @@ window.getDoc = getDoc;
 window.doc = doc;
 window.setDoc = setDoc;
 window.serverTimestamp = serverTimestamp;
+window.collection = collection;
+window.getDocs = getDocs;
+window.query = query;
+window.where = where;
+window.updateDoc = updateDoc;
+window.deleteDoc = deleteDoc;
 
 // Funções globais de Autenticação
 window.fazerLogin = async (email, senha) => {
@@ -74,6 +80,27 @@ onAuthStateChanged(auth, async (user) => {
   const appScreen = document.getElementById('app');
 
   if (user) {
+    // RBAC: o documento usuarios/{uid} é a fonte de verdade da função.
+    // Se ainda não existir, o acesso cai para vendedor por segurança.
+    window.currentFirebaseUser = user;
+    try {
+      const userSnap = await getDoc(doc(db, 'usuarios', user.uid));
+      const userData = userSnap.exists() ? userSnap.data() : {};
+      const allowedRoles = ['admin', 'vendedor', 'visualizador'];
+      window.currentUserRole = allowedRoles.includes(userData.role) ? userData.role : 'vendedor';
+      window.currentUserComissao = Number(userData.comissaoPorcentagem ?? 20);
+      window.currentUserProfile = {
+        uid: user.uid,
+        email: user.email || '',
+        role: window.currentUserRole,
+        comissaoPorcentagem: window.currentUserComissao
+      };
+    } catch (roleError) {
+      console.error('Falha ao carregar perfil RBAC:', roleError);
+      window.currentUserRole = 'vendedor';
+      window.currentUserComissao = 20;
+      window.currentUserProfile = { uid: user.uid, email: user.email || '', role: 'vendedor', comissaoPorcentagem: 20 };
+    }
     if (loginScreen) loginScreen.style.display = 'none';
     if (appScreen) appScreen.style.display = 'flex';
     const userEmailEl = document.getElementById('currentUserEmail');
@@ -1190,7 +1217,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       
       <div class="login-tabs">
         <button class="login-tab active" id="tabEntrar" onclick="alternarAbaLogin('entrar')">Entrar</button>
-        <button class="login-tab" id="tabCadastrar" onclick="alternarAbaLogin('cadastrar')">Criar Conta</button>
+        <button class="login-tab" id="tabCadastrar" style="display:none" aria-hidden="true">Criar Conta</button>
       </div>
 
       <form id="authForm" onsubmit="submeterAuth(event)">
@@ -1281,20 +1308,11 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       const senha = document.getElementById('authSenha').value;
 
       try {
-        if (modoAuth === 'entrar') {
-          await window.fazerLogin(email, senha);
-          toast('Login realizado com sucesso!', 'ok');
-        } else {
-          await window.fazerCadastro(email, senha);
-          toast('Conta criada com sucesso!', 'ok');
-        }
+        // Não existe cadastro público. Somente contas já existentes no Firebase Auth entram no ERP.
+        await window.fazerLogin(email, senha);
+        toast('Login realizado com sucesso!', 'ok');
       } catch (err) {
-        if (modoAuth === 'entrar' && (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found')) {
-          toast('Conta não cadastrada. Mudei para a aba "Criar Conta"!', 'err');
-          alternarAbaLogin('cadastrar');
-        } else {
-          toast('Erro de autenticação: ' + err.message, 'err');
-        }
+        toast('Não foi possível entrar: ' + (err.code || err.message), 'err');
       }
     }
 
@@ -1410,6 +1428,10 @@ ${baseConfig.cuidados}
     }
 
   async function loadKey(key, fallback) {
+  // RBAC: não carregar dados fora do escopo da função.
+  const roleAtual = window.currentUserRole || 'vendedor';
+  if (roleAtual === 'vendedor' && ['config','insumos','producoes','caixa','etiquetaLayout','vendas'].includes(key)) return fallback;
+  if (roleAtual === 'visualizador' && ['vendas','caixa'].includes(key)) return fallback;
   try {
     const snap = await window.getDoc(window.doc(window.db, 'erp_data', key));
     if (snap.exists() && snap.data().dados != null) {
@@ -2333,6 +2355,10 @@ async function saveKey(key, value) {
                   <input type="datetime-local" id="vendaDataHora" class="input" value="${isoToDatetimeLocal(venda ? venda.data : nowISO())}">
                 </div>
               </div>
+              <div class="field">
+                <label>Local / Canal de Venda</label>
+                <input type="text" id="vendaCanal" class="input" value="${esc(venda?.localCanal || 'Venda de campo')}" placeholder="Ex.: Praça, porta a porta, evento...">
+              </div>
             </div>
             <div class="modal-foot">
               <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
@@ -2365,8 +2391,14 @@ async function saveKey(key, value) {
         DB.vendas[idx] = {
           ...vendaAntiga,
           data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : vendaAntiga.data,
-          itens: [{ produtoId, qty, preco: produto.preco }]
+          itens: [{ produtoId, qty, preco: produto.preco }],
+          localCanal: document.getElementById('vendaCanal')?.value?.trim() || vendaAntiga.localCanal || 'Venda de campo',
+          vendedorUid: vendaAntiga.vendedorUid || window.currentFirebaseUser?.uid || '',
+          vendedorEmail: vendaAntiga.vendedorEmail || window.currentFirebaseUser?.email || '',
+          comissaoPorcentagem: Number(vendaAntiga.comissaoPorcentagem ?? window.currentUserComissao ?? 20),
+          statusAcerto: vendaAntiga.statusAcerto || 'pendente'
         };
+        if (window.salvarVendaFirestore) window.salvarVendaFirestore(DB.vendas[idx]);
 
         persist('produtos', 'vendas');
         fecharModalDirect();
@@ -2377,11 +2409,19 @@ async function saveKey(key, value) {
 
       produto.estoque = Math.max(0, produto.estoque - qty);
 
-      DB.vendas.push({
+      const vendaNova = {
         id: uid(),
         data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : nowISO(),
-        itens: [{ produtoId, qty, preco: produto.preco }]
-      });
+        itens: [{ produtoId, qty, preco: produto.preco }],
+        origem: 'manual',
+        localCanal: document.getElementById('vendaCanal')?.value?.trim() || 'Venda de campo',
+        vendedorUid: window.currentFirebaseUser?.uid || '',
+        vendedorEmail: window.currentFirebaseUser?.email || '',
+        comissaoPorcentagem: Number(window.currentUserComissao ?? 20),
+        statusAcerto: 'pendente'
+      };
+      DB.vendas.push(vendaNova);
+      if (window.salvarVendaFirestore) window.salvarVendaFirestore(vendaNova);
 
       persist('produtos', 'vendas');
       fecharModalDirect();
@@ -2740,13 +2780,20 @@ async function saveKey(key, value) {
       item.status = tipo === 'perda' ? 'perda' : (tipo === 'doacao' ? 'doado' : 'vendido');
 
       if (tipo === 'venda') {
-        DB.vendas.push({
+        const vendaBipagem = {
           id: uid(),
           data: nowISO(),
           itens: [{ produtoId: produto.id, qty: 1, preco: produto.preco }],
           origem: 'bipagem',
-          codigo
-        });
+          codigo,
+          localCanal: 'Bipagem / Campo',
+          vendedorUid: window.currentFirebaseUser?.uid || '',
+          vendedorEmail: window.currentFirebaseUser?.email || '',
+          comissaoPorcentagem: Number(window.currentUserComissao ?? 20),
+          statusAcerto: 'pendente'
+        };
+        DB.vendas.push(vendaBipagem);
+        if (window.salvarVendaFirestore) window.salvarVendaFirestore(vendaBipagem);
       }
 
       DB.scanlog.push({
@@ -3103,5 +3150,313 @@ async function saveKey(key, value) {
       document.getElementById('modalRoot').innerHTML = '';
     }
   </script>
+<script>
+(function(){
+  'use strict';
+
+  // ==================== RBAC + COMISSÕES ====================
+  const ROLES = Object.freeze({ ADMIN:'admin', VENDEDOR:'vendedor', VISUALIZADOR:'visualizador' });
+  const ROLE_LABELS = { admin:'Administrador', vendedor:'Vendedor', visualizador:'Visualizador' };
+  const ROLE_ROUTES = {
+    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','usuarios','config'],
+    vendedor: ['produtos','vendas','bipagem','comissoes'],
+    visualizador: ['dashboard','estoque','produtos','producao','bipagem','etiquetas','relatorios']
+  };
+  window.currentUserRole = window.currentUserRole || 'vendedor';
+  window.currentUserComissao = Number(window.currentUserComissao ?? 20);
+  window.currentFirebaseUser = window.currentFirebaseUser || null;
+  window.currentUserProfile = window.currentUserProfile || null;
+  window.__usersCache = [];
+  window.__comissaoFiltro = 'mes';
+  window.__comissaoVendedor = 'todos';
+
+  const can = (route) => (ROLE_ROUTES[window.currentUserRole] || ROLE_ROUTES.vendedor).includes(route);
+  const isAdmin = () => window.currentUserRole === ROLES.ADMIN;
+  const isViewer = () => window.currentUserRole === ROLES.VISUALIZADOR;
+  const isSeller = () => window.currentUserRole === ROLES.VENDEDOR;
+  window.rbacCan = can;
+
+  function roleBadge(role){
+    const cls = role === 'admin' ? 'badge-ok' : role === 'visualizador' ? 'badge-warn' : 'badge-muted';
+    return `<span class="badge ${cls}">${esc(ROLE_LABELS[role] || role)}</span>`;
+  }
+
+  function saleTotal(v){ return (v.itens || []).reduce((s,i)=>s + (Number(i.preco)||0)*(Number(i.qty)||0),0); }
+  function saleDate(v){ return v.data ? new Date(v.data) : new Date(); }
+  function saleVendorUid(v){ return v.vendedorUid || ''; }
+  function saleCommissionRate(v){
+    const n = Number(v.comissaoPorcentagem);
+    return Number.isFinite(n) ? n : 20;
+  }
+  function saleCommission(v){ return saleTotal(v) * saleCommissionRate(v) / 100; }
+  function saleRepasse(v){ return saleTotal(v) - saleCommission(v); }
+  window.vendasFaturamento = window.vendasFaturamento || saleTotal;
+
+  async function salvarVendaFirestore(venda){
+    if (!window.db || !window.doc || !window.setDoc) return;
+    try {
+      await window.setDoc(window.doc(window.db, 'vendas', venda.id), {
+        ...venda,
+        atualizadoEm: window.serverTimestamp ? window.serverTimestamp() : new Date().toISOString()
+      }, {merge:true});
+    } catch(e){ console.error('Erro ao salvar venda individual:', e); toast('Venda registrada localmente, mas houve erro ao sincronizar.', 'err'); }
+  }
+  window.salvarVendaFirestore = salvarVendaFirestore;
+
+  async function excluirVendaFirestore(id){
+    try {
+      if (window.deleteDoc) await window.deleteDoc(window.doc(window.db,'vendas',id));
+    } catch(e){ console.error(e); }
+  }
+
+  async function carregarVendasRBAC(){
+    const role = window.currentUserRole;
+    const user = window.currentFirebaseUser;
+    if (!user || !window.getDocs || !window.collection) return await loadKey('vendas', []);
+    try {
+      const col = window.collection(window.db, 'vendas');
+      let snap;
+      if (role === ROLES.VENDEDOR) {
+        const q = window.query(col, window.where('vendedorUid','==',user.uid));
+        snap = await window.getDocs(q);
+      } else {
+        snap = await window.getDocs(col);
+      }
+      const vendas = [];
+      snap.forEach(d => vendas.push({id:d.id, ...d.data()}));
+      // Migração transparente: vendas antigas continuam disponíveis ao administrador.
+      if (!vendas.length && role !== ROLES.VENDEDOR) {
+        return await loadKey('vendas', []);
+      }
+      localStorage.setItem('docemg_vendas', JSON.stringify(vendas));
+      return vendas;
+    } catch(e){
+      console.warn('Coleção vendas individual indisponível:', e);
+      // Fallback local somente para preservar funcionamento em ambientes antigos.
+      const antigas = await loadKey('vendas', []);
+      return role === ROLES.VENDEDOR ? antigas.filter(v => !v.vendedorUid || v.vendedorUid === user.uid) : antigas;
+    }
+  }
+
+  // Sobrescreve o carregamento para aplicar escopo por usuário nas vendas.
+  const loadAllOriginal = window.loadAll;
+  window.loadAll = async function(){
+    if (loadAllOriginal) await loadAllOriginal();
+    DB.vendas = await carregarVendasRBAC();
+    if (window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
+  };
+
+  // ---------- Navegação protegida ----------
+  const ALL_NAV = [
+    {id:'dashboard',label:'Painel',icon:window.iconDash || (()=>'')},
+    {id:'estoque',label:'Estoque & Insumos',icon:window.iconLayers || (()=>'')},
+    {id:'produtos',label:'Produtos',icon:window.iconTag || (()=>'')},
+    {id:'producao',label:'Produção',icon:window.iconBox || (()=>'')},
+    {id:'vendas',label:'Vendas',icon:window.iconCart || (()=>'')},
+    {id:'caixa',label:'Fluxo de Caixa',icon:window.iconCash || (()=>'')},
+    {id:'bipagem',label:'Bipagem',icon:window.iconScan || (()=>'')},
+    {id:'etiquetas',label:'Etiquetas',icon:window.iconTicket || (()=>'')},
+    {id:'relatorios',label:'Relatórios',icon:window.iconChart || (()=>'')},
+    {id:'comissoes',label:isSeller()?'Minhas Comissões / Acerto':'Comissões / Acertos',icon:window.iconCash || (()=>'')},
+    {id:'usuarios',label:'Gerenciamento de Usuários',icon:window.iconGear || (()=>'')},
+    {id:'config',label:'Configurações',icon:window.iconGear || (()=>'')}
+  ];
+  function allowedNav(){ return ALL_NAV.filter(i=>can(i.id)); }
+  window.renderNav = function(){
+    const items = allowedNav();
+    const nav=document.getElementById('nav');
+    if(nav) nav.innerHTML=items.map(it=>`<button class="nav-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
+    if(nav) nav.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));
+    const m=document.getElementById('mobileNav');
+    if(m){m.innerHTML=items.map(it=>`<button class="${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');m.querySelectorAll('button').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));}
+  };
+  window.setRoute = function(route){
+    if(!can(route)) route = allowedNav()[0]?.id || 'produtos';
+    if(ROUTE==='bipagem' && route!=='bipagem' && window.pararScannerBipagem) window.pararScannerBipagem();
+    ROUTE=route;
+    window.render();
+    if(route==='etiquetas' && window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
+  };
+
+  const titles = {
+    dashboard:['Painel','Visão operacional do negócio'], estoque:['Estoque & Insumos','Matérias-primas e níveis de estoque'],
+    produtos:['Produtos','Consulta de produtos e preços'], producao:['Produção','Lotes produzidos e etiquetas'], vendas:['Vendas','Registre vendas manuais'],
+    caixa:['Fluxo de Caixa','Entradas, saídas e saldo do negócio'], bipagem:['Bipagem','Saída rápida de itens por QR Code'], etiquetas:['Etiquetas','Gere e reimprima etiquetas'],
+    relatorios:['Relatórios','Indicadores e desempenho'], comissoes:[isSeller()?'Minhas Comissões / Acerto':'Comissões / Acertos','Transparência de ganhos e prestações de contas'],
+    usuarios:['Gerenciamento de Usuários','Funções e comissões dos usuários'], config:['Configurações','Dados da empresa']
+  };
+
+  // ---------- Produto somente leitura para vendedor ----------
+  const viewProdutosOriginal = window.viewProdutos;
+  window.viewProdutos = function(){
+    const html = viewProdutosOriginal ? viewProdutosOriginal() : '';
+    if(!isSeller() && !isViewer()) return html;
+    // Reaproveita a tabela existente, removendo a coluna Ações e quaisquer botões de alteração.
+    const c = document.createElement('div'); c.innerHTML=html;
+    c.querySelectorAll('button').forEach(b=>b.remove());
+    c.querySelectorAll('th').forEach(th=>{if((th.textContent||'').trim().toLowerCase()==='ações') th.remove();});
+    c.querySelectorAll('tr').forEach(tr=>tr.querySelectorAll('td').forEach((td,i)=>{ if(td.textContent.trim()==='') return; }));
+    c.querySelectorAll('tr').forEach(tr=>{ const cells=tr.querySelectorAll('td'); if(cells.length>=6) cells[cells.length-1].remove(); });
+    return c.innerHTML;
+  };
+  const salvarProdutoOriginal=window.salvarProduto;
+  window.salvarProduto=function(id){ if(!isAdmin()) return toast('Apenas o administrador pode alterar produtos.','err'); return salvarProdutoOriginal(id); };
+  const deletarProdutoOriginal=window.deletarProduto;
+  window.deletarProduto=function(id){ if(!isAdmin()) return toast('Apenas o administrador pode excluir produtos.','err'); return deletarProdutoOriginal(id); };
+
+  // ---------- Dashboard seguro para visualizador ----------
+  window.viewDashboard = function(){
+    if(!isViewer()) return viewDashboardOriginal ? viewDashboardOriginal() : '';
+    const hoje=todayISO();
+    const vendasHoje=(DB.vendas||[]).filter(v=>String(v.data||'').slice(0,10)===hoje);
+    const itensHoje=vendasHoje.reduce((s,v)=>s+(v.itens||[]).reduce((a,i)=>a+(Number(i.qty)||0),0),0);
+    const produtosAtivos=(DB.produtos||[]).length;
+    const estoqueBaixo=(DB.produtos||[]).filter(produtoLowStock).length;
+    const lotesHoje=(DB.producoes||[]).filter(p=>p.dataFabricacao===hoje).length;
+    return `<div class="grid grid-4">
+      <div class="card stat"><div class="label">Vendas hoje</div><div class="value">${vendasHoje.length}</div><div class="delta">Quantidade de operações</div></div>
+      <div class="card stat"><div class="label">Itens vendidos hoje</div><div class="value">${itensHoje}</div><div class="delta">Unidades movimentadas</div></div>
+      <div class="card stat"><div class="label">Produtos cadastrados</div><div class="value">${produtosAtivos}</div><div class="delta">Catálogo atual</div></div>
+      <div class="card stat"><div class="label">Estoque em alerta</div><div class="value">${estoqueBaixo}</div><div class="delta">Produto(s) no mínimo</div></div>
+      <div class="card card-pad" style="grid-column:1/-1"><h3>Produção de hoje</h3><div class="value" style="font-family:'Fraunces';font-size:28px;margin-top:8px">${lotesHoje} lote(s)</div><p class="hint">Painel do visualizador exibe somente indicadores operacionais, sem faturamento, lucro ou custos em R$.</p></div>
+    </div>`;
+  };
+  const viewDashboardOriginal = window.viewDashboard;
+
+  // ---------- Gerenciamento de usuários ----------
+  async function carregarUsuarios(){
+    if(!isAdmin()) return [];
+    try{
+      const snap=await window.getDocs(window.collection(window.db,'usuarios'));
+      window.__usersCache=[]; snap.forEach(d=>window.__usersCache.push({uid:d.id,...d.data()}));
+      return window.__usersCache;
+    }catch(e){toast('Não foi possível carregar usuários: '+e.message,'err');return [];}
+  }
+  window.salvarPerfilUsuario = async function(uid){
+    if(!isAdmin()) return toast('Acesso restrito ao administrador.','err');
+    const role=document.getElementById('usrRole_'+uid)?.value;
+    const comissao=Math.max(0,Math.min(100,Number(document.getElementById('usrComissao_'+uid)?.value)||0));
+    try{
+      await window.setDoc(window.doc(window.db,'usuarios',uid),{role,comissaoPorcentagem:comissao,atualizadoEm:window.serverTimestamp()},{merge:true});
+      toast('Perfil atualizado!','ok'); await carregarUsuarios(); render();
+    }catch(e){toast('Erro ao salvar perfil: '+e.message,'err');}
+  };
+  window.viewUsuarios = async function(){
+    const users=await carregarUsuarios();
+    const rows=users.map(u=>`<tr><td><b>${esc(u.email||'Sem e-mail')}</b><br><small class="mono">${esc(u.uid)}</small></td><td><select id="usrRole_${esc(u.uid)}" class="input" style="min-width:150px">${['admin','vendedor','visualizador'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td><td><input id="usrComissao_${esc(u.uid)}" class="input" type="number" min="0" max="100" step="0.1" value="${Number(u.comissaoPorcentagem??20)}" style="max-width:120px"></td><td>${roleBadge(u.role||'vendedor')}</td><td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="salvarPerfilUsuario('${esc(u.uid)}')">Salvar</button></td></tr>`).join('');
+    return `<div class="card card-pad"><div class="help-note"><b>RBAC:</b> usuários autenticados sem documento em <span class="mono">usuarios/{uid}</span> entram automaticamente como vendedor, sem acesso aos dados administrativos.</div><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Função</th><th>Comissão %</th><th>Status</th><th style="text-align:right">Ação</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Nenhum perfil cadastrado.</td></tr>'}</tbody></table></div></div>`;
+  };
+
+  // ---------- Comissões / Acertos ----------
+  function periodoComissao(){
+    const hoje=new Date(); hoje.setHours(0,0,0,0);
+    const inicio=new Date(hoje);
+    if(window.__comissaoFiltro==='hoje'){}
+    else if(window.__comissaoFiltro==='7dias') inicio.setDate(inicio.getDate()-6);
+    else inicio.setDate(1);
+    const fim=new Date(hoje); fim.setHours(23,59,59,999);
+    return {inicio,fim};
+  }
+  function vendasComissao(){
+    const {inicio,fim}=periodoComissao();
+    const uidFiltro=window.__comissaoVendedor;
+    return (DB.vendas||[]).filter(v=>{
+      const d=saleDate(v); const inPeriod=d>=inicio&&d<=fim;
+      const inUser=uidFiltro==='todos' || saleVendorUid(v)===uidFiltro;
+      return inPeriod&&inUser;
+    });
+  }
+  function comissaoResumo(lista){
+    const pendentes=lista.filter(v=>(v.statusAcerto||'pendente')!=='quitado');
+    return {
+      vendas:pendentes.reduce((s,v)=>s+saleTotal(v),0),
+      comissao:pendentes.reduce((s,v)=>s+saleCommission(v),0),
+      repasse:pendentes.reduce((s,v)=>s+saleRepasse(v),0),
+      quantidade:pendentes.length,
+      totalPeriodo:lista.reduce((s,v)=>s+saleTotal(v),0),
+      quitado:lista.filter(v=>v.statusAcerto==='quitado').reduce((s,v)=>s+saleRepasse(v),0)
+    };
+  }
+  window.marcarAcertoRealizado = async function(){
+    if(!isAdmin()) return toast('Somente o administrador pode quitar prestações.','err');
+    const lista=vendasComissao().filter(v=>(v.statusAcerto||'pendente')!=='quitado');
+    if(!lista.length) return toast('Não há vendas pendentes neste período.','err');
+    const resumo=comissaoResumo(lista); const id=uid();
+    try{
+      await window.setDoc(window.doc(window.db,'acertos',id),{id, vendedorUid:window.__comissaoVendedor, periodo:window.__comissaoFiltro,totalVendido:resumo.vendas,comissao:resumo.comissao,valorRepassar:resumo.repasse,vendaIds:lista.map(v=>v.id),realizadoPor:window.currentFirebaseUser?.uid||'',realizadoEm:window.serverTimestamp()});
+      lista.forEach(v=>v.statusAcerto='quitado',v.acertoId=id);
+      await Promise.all(lista.map(v=>salvarVendaFirestore(v)));
+      await saveKey('vendas',DB.vendas);
+      toast('Prestação de contas quitada e zerada para o período.','ok'); render();
+    }catch(e){toast('Erro ao quitar acerto: '+e.message,'err');}
+  };
+  window.viewComissoes = function(){
+    let vendedores=[];
+    if(isAdmin()) vendedores=window.__usersCache.filter(u=>u.role==='vendedor');
+    const lista=vendasComissao(); const r=comissaoResumo(lista);
+    const seletor=isAdmin()?`<div class="field"><label>Vendedor</label><select class="input" onchange="window.__comissaoVendedor=this.value; render()"><option value="todos" ${window.__comissaoVendedor==='todos'?'selected':''}>Todos os vendedores</option>${vendedores.map(u=>`<option value="${esc(u.uid)}" ${window.__comissaoVendedor===u.uid?'selected':''}>${esc(u.email||u.uid)} · ${Number(u.comissaoPorcentagem??20)}%</option>`).join('')}</select></div>`:`<div class="help-note"><b>Comissão atual:</b> ${Number(window.currentUserComissao)}% · este painel mostra somente suas próprias vendas.</div>`;
+    const rows=lista.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{const t=saleTotal(v),c=saleCommission(v),rp=saleRepasse(v),item=v.itens?.[0]||{}; const p=findProduto(item.produtoId); return `<tr><td class="mono">${fmtDateTime(v.data)}</td><td>${esc(p?.nome||item.produtoId||'—')}</td><td>${item.qty||0}</td><td>${esc(v.localCanal||'—')}</td><td>${fmtMoney(t)}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(c)}</td><td>${fmtMoney(rp)}</td><td>${v.statusAcerto==='quitado'?'<span class="badge badge-ok">Quitado</span>':'<span class="badge badge-warn">Pendente</span>'}</td></tr>`}).join('');
+    return `${seletor}<div class="pill-tabs" style="margin-bottom:16px"><button class="pill-tab ${window.__comissaoFiltro==='hoje'?'active':''}" onclick="window.__comissaoFiltro='hoje';render()">Hoje</button><button class="pill-tab ${window.__comissaoFiltro==='7dias'?'active':''}" onclick="window.__comissaoFiltro='7dias';render()">7 dias</button><button class="pill-tab ${window.__comissaoFiltro==='mes'?'active':''}" onclick="window.__comissaoFiltro='mes';render()">Mês Atual</button></div>
+      <div class="grid grid-3"><div class="card stat"><div class="label">Total Vendido</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">Pendente de acerto</div></div><div class="card stat"><div class="label">Comissão do Vendedor</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Ganhos no período</div></div><div class="card stat"><div class="label">Valor a Repassar ao Gabriel</div><div class="value">${fmtMoney(r.repasse)}</div><div class="delta">Prestação de contas pendente</div></div></div>
+      ${isAdmin()?`<div style="display:flex;justify-content:flex-end;margin:16px 0"><button class="btn btn-gold" onclick="marcarAcertoRealizado()">✓ Marcar Acerto Realizado / Quitar Prestação</button></div>`:''}
+      <div class="card card-pad"><div class="section-title" style="margin-top:0"><h2>Extrato de Vendas</h2><span class="hint">${lista.length} lançamento(s) no período</span></div><div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Produto/Sabor</th><th>Qtd.</th><th>Local/Canal</th><th>Valor Total</th><th>% Comissão</th><th>Comissão R$</th><th>Repassar R$</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="empty">Nenhuma venda no período selecionado.</td></tr>'}</tbody></table></div></div>`;
+  };
+
+  // ---------- Render central com bloqueio de rota e ações ----------
+  window.render = async function(){
+    if(!can(ROUTE)) ROUTE=allowedNav()[0]?.id||'produtos';
+    window.renderNav();
+    const title=titles[ROUTE]||['ERP',''];
+    document.getElementById('pageTitle').textContent=title[0]; document.getElementById('pageSub').textContent=title[1];
+    const c=document.getElementById('content'), actions=document.getElementById('topbarActions'); actions.innerHTML='';
+    if(ROUTE==='dashboard'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas','caixa');toast('Dados sincronizados com sucesso!','ok')">💾 Salvar informações</button>`; c.innerHTML=window.viewDashboard(); if(isAdmin()&&window.renderDashCharts) window.renderDashCharts(); }
+    else if(ROUTE==='estoque'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`; c.innerHTML=window.viewEstoque(); }
+    else if(ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
+    else if(ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
+    else if(ROUTE==='vendas'){ if(isAdmin()||isSeller()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`; c.innerHTML=window.viewVendas(); }
+    else if(ROUTE==='caixa'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`; c.innerHTML=window.viewCaixa(); if(window.renderCaixaCharts) window.renderCaixaCharts(); }
+    else if(ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
+    else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
+    else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
+    else if(ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
+    else if(ROUTE==='usuarios') c.innerHTML=await window.viewUsuarios();
+    else if(ROUTE==='config') c.innerHTML=window.viewConfig();
+  };
+
+  // Guardas para ações administrativas sensíveis.
+  ['salvarInsumo','deletarInsumo','salvarProducao','deletarProducao','salvarConfig'].forEach(fn=>{
+    const original=window[fn];
+    if(typeof original==='function') window[fn]=function(...args){ if(!isAdmin()){toast('Ação disponível somente para o administrador.','err');return;} return original(...args); };
+  });
+  const modalProdutoOriginal=window.modalProduto;
+  window.modalProduto=function(id=null){ if(!isAdmin()) return toast('Produtos estão em modo somente leitura para este usuário.','err'); return modalProdutoOriginal(id); };
+  const modalInsumoOriginal=window.modalInsumo;
+  window.modalInsumo=function(id=null){ if(!isAdmin()) return toast('Ação disponível somente para o administrador.','err'); return modalInsumoOriginal(id); };
+  const modalProducaoOriginal=window.modalProducao;
+  window.modalProducao=function(id=null){ if(!isAdmin()) return toast('Ação disponível somente para o administrador.','err'); return modalProducaoOriginal(id); };
+  const modalCaixaOriginal=window.modalCaixa;
+  window.modalCaixa=function(id=null){ if(!isAdmin()) return toast('Ação disponível somente para o administrador.','err'); return modalCaixaOriginal(id); };
+
+  const deletarVendaOriginal=window.deletarVenda;
+  window.deletarVenda=function(id){ if(!isAdmin()&&!isSeller()) return toast('Ação disponível somente para usuários autorizados.','err'); const r=deletarVendaOriginal(id); excluirVendaFirestore(id); return r; };
+
+  // Persistência com escopo: vendedor não sobrescreve documentos administrativos
+  // compartilhados; vendas ficam em documentos individuais por UID.
+  const persistOriginal = window.persist;
+  window.persist = function(...keys){
+    if(!isSeller()){ return persistOriginal(...keys); }
+    keys.forEach(k=>{
+      if(k==='vendas') (DB.vendas||[]).filter(v=>v.vendedorUid===window.currentFirebaseUser?.uid).forEach(v=>salvarVendaFirestore(v));
+      else localStorage.setItem('docemg_'+k, JSON.stringify(DB[k]));
+    });
+  };
+
+  // Apresenta a função no rodapé para facilitar conferência operacional.
+  const oldRoleText = window.__rbacRoleText;
+  window.__rbacRoleText = ()=>ROLE_LABELS[window.currentUserRole]||window.currentUserRole;
+
+})();
+
+</script>
 </body>
 </html>
