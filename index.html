@@ -3305,6 +3305,9 @@ async function saveKey(key, value) {
   window.deletarProduto=function(id){ if(!isAdmin()) return toast('Apenas o administrador pode excluir produtos.','err'); return deletarProdutoOriginal(id); };
 
   // ---------- Dashboard seguro para visualizador ----------
+  // Guarda a implementação original ANTES de substituí-la.
+  // Sem isso, o modo administrador acabava chamando a própria função em loop.
+  const viewDashboardOriginal = window.viewDashboard;
   window.viewDashboard = function(){
     if(!isViewer()) return viewDashboardOriginal ? viewDashboardOriginal() : '';
     const hoje=todayISO();
@@ -3321,7 +3324,6 @@ async function saveKey(key, value) {
       <div class="card card-pad" style="grid-column:1/-1"><h3>Produção de hoje</h3><div class="value" style="font-family:'Fraunces';font-size:28px;margin-top:8px">${lotesHoje} lote(s)</div><p class="hint">Painel do visualizador exibe somente indicadores operacionais, sem faturamento, lucro ou custos em R$.</p></div>
     </div>`;
   };
-  const viewDashboardOriginal = window.viewDashboard;
 
   // ---------- Gerenciamento de usuários ----------
   async function carregarUsuarios(){
