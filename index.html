@@ -75,7 +75,10 @@ onAuthStateChanged(auth, async (user) => {
       const userSnap = await getDoc(doc(db, 'usuarios', user.uid));
       const userData = userSnap.exists() ? userSnap.data() : {};
       const allowedRoles = ['admin', 'vendedor', 'visualizador'];
-      window.currentUserRole = allowedRoles.includes(userData.role) ? userData.role : 'vendedor';
+      // Normaliza (trim + minúsculas) para não cair no fallback por causa de
+      // "Admin", "ADMIN " ou espaços digitados à mão no Firestore Console.
+      const roleNormalizado = String(userData.role || '').trim().toLowerCase();
+      window.currentUserRole = allowedRoles.includes(roleNormalizado) ? roleNormalizado : 'vendedor';
       window.currentUserComissao = Number(userData.comissaoPorcentagem ?? 20);
       window.currentUserProfile = {
         uid: user.uid,
@@ -255,6 +258,8 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     .mobile-nav button svg { width: 15px; height: 15px; flex-shrink: 0; opacity: .85; }
     .mobile-nav button.active { background: #fff; color: var(--wine-dark); }
     .mobile-nav button.active svg { opacity: 1; }
+    .mobile-nav button.mnav-sair { color: #E8B4A8; margin-left: 4px; border-left: 1px solid rgba(255,255,255,.15); border-radius: 0; padding-left: 14px; }
+    .mobile-nav button.mnav-sair:active { background: rgba(255, 255, 255, .1); }
     .content { padding: 16px 14px 76px 14px; }
     .topbar { position: static; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 14px 16px 16px 16px; }
     .topbar h1 { font-size: 19px; }
@@ -2507,13 +2512,32 @@ ${baseConfig.cuidados}
     {id:'config',label:'Configurações',icon:window.iconGear || (()=>'')}
   ];
   function allowedNav(){ return ALL_NAV.filter(i=>can(i.id)); }
+  function iconLogout(){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>'; }
+  // Atualiza o e-mail/função no rodapé do menu lateral (desktop). No celular o
+  // menu lateral some (display:none), então lá a saída de conta vira uma aba
+  // "Sair" dentro da própria faixa de módulos — ver window.renderNav abaixo.
+  function renderUserBar(){
+    const email = (window.currentFirebaseUser && window.currentFirebaseUser.email) || '';
+    const label = ROLE_LABELS[window.currentUserRole] || window.currentUserRole;
+    const desktopEl = document.getElementById('currentUserEmail');
+    if (desktopEl) desktopEl.textContent = email ? `${email} · ${label}` : 'Usuário Autenticado';
+  }
+  window.renderUserBar = renderUserBar;
   window.renderNav = function(){
     const items = allowedNav();
     const nav=document.getElementById('nav');
     if(nav) nav.innerHTML=items.map(it=>`<button class="nav-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
     if(nav) nav.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));
     const m=document.getElementById('mobileNav');
-    if(m){m.innerHTML=items.map(it=>`<button class="${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');m.querySelectorAll('button').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));}
+    if(m){
+      const itensHtml = items.map(it=>`<button class="${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
+      const sairHtml = `<button class="mnav-sair" data-action="sair">${iconLogout()}<span>Sair</span></button>`;
+      m.innerHTML = itensHtml + sairHtml;
+      m.querySelectorAll('button[data-route]').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));
+      const btnSair = m.querySelector('button[data-action="sair"]');
+      if (btnSair) btnSair.onclick = () => { if (confirm('Deseja realmente sair da conta?')) window.fazerLogout(); };
+    }
+    renderUserBar();
   };
   window.setRoute = function(route){
     if(!can(route)) route = allowedNav()[0]?.id || 'produtos';
