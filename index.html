@@ -1669,7 +1669,7 @@ ${baseConfig.cuidados}
           localCanal: document.getElementById('vendaCanal')?.value?.trim() || vendaAntiga.localCanal || 'Venda de campo',
           vendedorUid: vendaAntiga.vendedorUid || window.currentFirebaseUser?.uid || '',
           vendedorEmail: vendaAntiga.vendedorEmail || window.currentFirebaseUser?.email || '',
-          comissaoPorcentagem: Number(vendaAntiga.comissaoPorcentagem ?? window.currentUserComissao ?? 20),
+          comissaoPorcentagem: Number(vendaAntiga.comissaoPorcentagem ?? comissaoAplicavel()),
           statusAcerto: vendaAntiga.statusAcerto || 'pendente'
         };
         if (window.salvarVendaFirestore) window.salvarVendaFirestore(DB.vendas[idx]);
@@ -1691,7 +1691,7 @@ ${baseConfig.cuidados}
         localCanal: document.getElementById('vendaCanal')?.value?.trim() || 'Venda de campo',
         vendedorUid: window.currentFirebaseUser?.uid || '',
         vendedorEmail: window.currentFirebaseUser?.email || '',
-        comissaoPorcentagem: Number(window.currentUserComissao ?? 20),
+        comissaoPorcentagem: comissaoAplicavel(),
         statusAcerto: 'pendente'
       };
       DB.vendas.push(vendaNova);
@@ -2013,9 +2013,26 @@ ${baseConfig.cuidados}
       if (tbody) tbody.innerHTML = renderBipagemLogRows();
     }
 
+    let bipagemPendente = null;
+
+    // Calcula a comissão aplicável à venda de acordo com quem está logado:
+    // Administrador bipando/vendendo não sofre desconto de comissão (o valor
+    // integral entra como faturamento da loja); Vendedor sempre usa o % de
+    // comissão configurado no seu perfil (padrão 20%).
+    function comissaoAplicavel() {
+      return (window.currentUserRole === 'admin') ? 0 : Number(window.currentUserComissao ?? 20);
+    }
+
+    // Busca o item pelo código e abre o modal de confirmação, sem registrar
+    // nada ainda — a baixa só acontece quando o usuário confirma no modal.
     function processarBipagemCodigo(codigoBruto) {
       const codigo = (codigoBruto || '').trim();
       if (!codigo) return;
+
+      if (bipagemPendente) {
+        toast('Finalize a confirmação da bipagem anterior antes de escanear outra.', 'err');
+        return;
+      }
 
       const achado = findItemByCode(codigo);
       if (!achado) { toast('Código não encontrado: ' + codigo, 'err'); return; }
@@ -2027,7 +2044,78 @@ ${baseConfig.cuidados}
       const produto = findProduto(producao.produtoId);
       if (!produto) { toast('Produto não encontrado para este item', 'err'); return; }
 
-      const tipo = BIPAGEM_TIPO;
+      bipagemPendente = { codigo, produto, producao, item, tipo: BIPAGEM_TIPO };
+      abrirModalConfirmacaoBipagem();
+    }
+
+    function abrirModalConfirmacaoBipagem() {
+      const p = bipagemPendente;
+      if (!p) return;
+      const tipoLabel = TIPO_BIP_LABELS[p.tipo] || p.tipo;
+      const infoComissao = p.tipo === 'venda'
+        ? (window.currentUserRole === 'admin'
+            ? '<p class="hint" style="margin-top:10px;">Registrada como venda direta do Administrador — sem desconto de comissão.</p>'
+            : `<p class="hint" style="margin-top:10px;">Será somada ao seu extrato de comissões (${comissaoAplicavel()}% de comissão sobre o valor).</p>`)
+        : '';
+      const content = `
+        <div class="modal-backdrop" onclick="if(event.target.classList.contains('modal-backdrop')) cancelarBipagemPendente();">
+          <div class="modal" style="max-width:420px;">
+            <div class="modal-head">
+              <h3>Confirmar Bipagem</h3>
+              <button class="modal-close" onclick="cancelarBipagemPendente()">×</button>
+            </div>
+            <div class="modal-body">
+              <div style="text-align:center;margin-bottom:16px;">
+                <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:600;">${esc(p.produto.nome)}</div>
+                <div class="mono" style="color:var(--muted);font-size:12.5px;margin-top:3px;">${esc(p.codigo)}</div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>Lote</label><div class="mono">${esc(p.producao.lote || '—')}</div></div>
+                <div class="field"><label>Validade</label><div class="mono">${fmtDate(p.producao.dataValidade)}</div></div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Preço (R$)${p.produto.preco !== undefined ? ` <span class="mono" style="font-weight:400;color:var(--muted);">padrão ${fmtMoney(p.produto.preco)}</span>` : ''}</label>
+                  <input type="number" id="bipPrecoAjustado" class="input" min="0" step="0.01" value="${Number(p.produto.preco).toFixed(2)}">
+                </div>
+                <div class="field"><label>Operação</label><div><span class="badge badge-muted">${esc(tipoLabel)}</span></div></div>
+              </div>
+              ${infoComissao}
+              ${p.tipo === 'venda' ? '<p class="hint" style="margin-top:6px;">Alterar o preço aqui vale só para esta venda (ex.: desconto). O preço cadastrado do produto não muda.</p>' : ''}
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="cancelarBipagemPendente()">Cancelar</button>
+              <button class="btn btn-primary" onclick="confirmarBipagemPendente()">Confirmar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalRoot').innerHTML = content;
+    }
+
+    function cancelarBipagemPendente() {
+      bipagemPendente = null;
+      fecharModalDirect();
+    }
+
+    function confirmarBipagemPendente() {
+      const p = bipagemPendente;
+      if (!p) return;
+      const { codigo, produto, item, tipo } = p;
+
+      const precoInput = document.getElementById('bipPrecoAjustado');
+      const precoVenda = precoInput ? (parseFloat(precoInput.value.replace(',', '.')) || 0) : produto.preco;
+
+      // revalida na hora de confirmar, caso o item tenha sido baixado por
+      // outra aba/dispositivo entre o scan e a confirmação
+      if (item.status && item.status !== 'disponivel') {
+        toast('Este item já foi baixado enquanto o modal estava aberto!', 'err');
+        bipagemPendente = null;
+        fecharModalDirect();
+        atualizarBipagemUI();
+        return;
+      }
+
       produto.estoque = Math.max(0, produto.estoque - 1);
       item.status = tipo === 'perda' ? 'perda' : (tipo === 'doacao' ? 'doado' : 'vendido');
 
@@ -2035,13 +2123,13 @@ ${baseConfig.cuidados}
         const vendaBipagem = {
           id: uid(),
           data: nowISO(),
-          itens: [{ produtoId: produto.id, qty: 1, preco: produto.preco }],
+          itens: [{ produtoId: produto.id, qty: 1, preco: precoVenda }],
           origem: 'bipagem',
           codigo,
           localCanal: 'Bipagem / Campo',
           vendedorUid: window.currentFirebaseUser?.uid || '',
           vendedorEmail: window.currentFirebaseUser?.email || '',
-          comissaoPorcentagem: Number(window.currentUserComissao ?? 20),
+          comissaoPorcentagem: comissaoAplicavel(),
           statusAcerto: 'pendente'
         };
         DB.vendas.push(vendaBipagem);
@@ -2060,9 +2148,12 @@ ${baseConfig.cuidados}
       persist('produtos', 'vendas', 'scanlog', 'producoes');
       atualizarBipagemUI();
 
-      if (tipo === 'venda') toast(`Venda registrada: ${produto.nome} (${fmtMoney(produto.preco)})`, 'ok');
+      if (tipo === 'venda') toast(`Venda registrada: ${produto.nome} (${fmtMoney(precoVenda)})`, 'ok');
       else if (tipo === 'doacao') toast(`Doação registrada: ${produto.nome}`, 'ok');
       else toast(`Perda/Avaria registrada: ${produto.nome}`, 'err');
+
+      bipagemPendente = null;
+      fecharModalDirect();
     }
 
     function processarBip(e) {
