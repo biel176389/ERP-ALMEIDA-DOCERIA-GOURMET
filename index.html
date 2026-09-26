@@ -641,8 +641,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         whatsapp: '(32) 98448-1635',
         instagram: 'almeidadocergourmet',
         origem: 'Miraí - MG',
-        cuidados: 'Manter em local fresco, seco e ao abrigo da luz solar.\nApós aberto, consumir em até 3 dias.\nEvitar armazenar próximo a produtos com cheiro forte.',
-        deducaoInsumos: 'producao'
+        cuidados: 'Manter em local fresco, seco e ao abrigo da luz solar.\nApós aberto, consumir em até 3 dias.\nEvitar armazenar próximo a produtos com cheiro forte.'
       };
       return {
         ...baseConfig,
@@ -925,10 +924,12 @@ ${baseConfig.cuidados}
       return v.itens.reduce((s, it) => {
         const p = findProduto(it.produtoId);
         if (!p) return s;
-        const custoUnit = (p.receita || []).reduce((acc, r) => { 
+        const custoFicha = (p.receita || []).reduce((acc, r) => { 
           const ins = findInsumo(r.insumoId); 
           return acc + (ins ? ins.custo * r.qtd : 0); 
         }, 0);
+        const rendimento = (p.rendimento && p.rendimento > 0) ? p.rendimento : 1;
+        const custoUnit = custoFicha / rendimento;
         return s + custoUnit * it.qty;
       }, 0);
     }
@@ -1441,9 +1442,12 @@ ${baseConfig.cuidados}
     function atualizarValidadeProducao() {
       const fabEl = document.getElementById('prodDataFab');
       const valEl = document.getElementById('prodDataVal');
+      const prodSelEl = document.getElementById('prodProdutoId');
       if (!fabEl || !valEl) return;
       const fab = fabEl.value || todayISO();
-      valEl.value = addDays(fab, DIAS_VALIDADE_PADRAO);
+      const produtoSel = prodSelEl ? findProduto(prodSelEl.value) : null;
+      const dias = (produtoSel && produtoSel.validadeDias > 0) ? produtoSel.validadeDias : DIAS_VALIDADE_PADRAO;
+      valEl.value = addDays(fab, dias);
     }
 
     function modalProducao(id = null) {
@@ -1454,7 +1458,9 @@ ${baseConfig.cuidados}
         dataValidade: ''
       };
       const dataFabInicial = prod.dataFabricacao || todayISO();
-      const dataValInicial = prod.dataValidade || addDays(dataFabInicial, DIAS_VALIDADE_PADRAO);
+      const produtoInicial = findProduto(prod.produtoId);
+      const diasInicial = (produtoInicial && produtoInicial.validadeDias > 0) ? produtoInicial.validadeDias : DIAS_VALIDADE_PADRAO;
+      const dataValInicial = prod.dataValidade || addDays(dataFabInicial, diasInicial);
 
       const content = `
         <div class="modal-backdrop" onclick="fecharModal(event)">
@@ -1466,7 +1472,7 @@ ${baseConfig.cuidados}
             <div class="modal-body">
               <div class="field">
                 <label>Produto</label>
-                <select id="prodProdutoId" class="input">
+                <select id="prodProdutoId" class="input" onchange="atualizarValidadeProducao()">
                   ${DB.produtos.map(p => `<option value="${p.id}" ${p.id === prod.produtoId ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
                 </select>
               </div>
@@ -1513,7 +1519,7 @@ ${baseConfig.cuidados}
           prod.dataFabricacao = dataFab;
           prod.dataValidade = dataVal;
           produto.estoque = Math.max(0, produto.estoque + diff);
-          if (DB.config.deducaoInsumos === 'producao' && diff !== 0) {
+          if (diff !== 0) {
             deduzInsumos(produto, diff);
           }
         }
@@ -1527,9 +1533,7 @@ ${baseConfig.cuidados}
           });
         }
 
-        if (DB.config.deducaoInsumos === 'producao') {
-          deduzInsumos(produto, qtd);
-        }
+        deduzInsumos(produto, qtd);
 
         produto.estoque += qtd;
 
@@ -2764,7 +2768,7 @@ ${baseConfig.cuidados}
     const resumo=comissaoResumo(lista); const id=uid();
     try{
       await window.setDoc(window.doc(window.db,'acertos',id),{id, vendedorUid:window.__comissaoVendedor, periodo:window.__comissaoFiltro,totalVendido:resumo.vendas,comissao:resumo.comissao,valorRepassar:resumo.repasse,vendaIds:lista.map(v=>v.id),realizadoPor:window.currentFirebaseUser?.uid||'',realizadoEm:window.serverTimestamp()});
-      lista.forEach(v=>v.statusAcerto='quitado',v.acertoId=id);
+      lista.forEach(v=>{ v.statusAcerto='quitado'; v.acertoId=id; });
       await Promise.all(lista.map(v=>salvarVendaFirestore(v)));
       await saveKey('vendas',DB.vendas);
       toast('Prestação de contas quitada e zerada para o período.','ok'); render();
@@ -2803,7 +2807,7 @@ ${baseConfig.cuidados}
     else if(ROUTE==='config') c.innerHTML=window.viewConfig();
   };
 
-  ['salvarInsumo','deletarInsumo','salvarProducao','deletarProducao','salvarConfig'].forEach(fn=>{
+  ['salvarInsumo','deletarInsumo','salvarProducao','deletarProducao','salvarConfig','salvarCaixa','deletarCaixa'].forEach(fn=>{
     const original=window[fn];
     if(typeof original==='function') window[fn]=function(...args){ if(!isAdmin()){toast('Ação disponível somente para o administrador.','err');return;} return original(...args); };
   });
