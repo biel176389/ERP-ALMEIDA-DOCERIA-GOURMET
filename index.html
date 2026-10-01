@@ -356,6 +356,10 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     font-size: 14px; font-family: 'Manrope'; color: var(--ink);
   }
   .input:focus, select:focus, textarea:focus { outline: 2px solid var(--wine-light); border-color: var(--wine); }
+  .bip-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 400; font-family: 'Manrope'; color: var(--ink); text-align: left; cursor: pointer; }
+  .bip-box:hover { background: var(--surface-2); }
+  .bip-box:focus { outline: 2px solid var(--wine-light); border-color: var(--wine); }
+  .bip-box.center { justify-content: center; text-align: center; }
   input[type="range"].input { padding: 0; border: none; background: transparent; accent-color: var(--wine, #7a1f3d); height: 28px; }
   label { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
   .field { margin-bottom: 14px; }
@@ -958,7 +962,8 @@ ${baseConfig.cuidados}
       const vendasMes = DB.vendas.filter(v => vendaDia(v).slice(0, 7) === mesRef);
       const faturamentoMes = vendasMes.reduce((s, v) => s + vendasFaturamento(v), 0);
       const custoMes = vendasMes.reduce((s, v) => s + vendaCusto(v), 0);
-      const lucroMes = faturamentoMes - custoMes;
+      const comissaoMes = vendasMes.reduce((s, v) => s + (window.saleCommission ? window.saleCommission(v) : 0), 0);
+      const lucroMes = faturamentoMes - custoMes - comissaoMes;
       const vendasHoje = DB.vendas.filter(v => vendaDia(v) === hoje);
       const itensHoje = vendasHoje.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.qty, 0), 0);
       const lowInsumos = DB.insumos.filter(insumoLowStock).length;
@@ -989,7 +994,7 @@ ${baseConfig.cuidados}
       return `
       <div class="grid grid-4">
         <div class="card stat"><div class="label">Faturamento (mês)</div><div class="value">${fmtMoney(faturamentoMes)}</div><div class="delta">${vendasMes.length} venda(s) no mês</div></div>
-        <div class="card stat"><div class="label">Lucro estimado (mês)</div><div class="value">${fmtMoney(lucroMes)}</div><div class="delta">custo insumos: ${fmtMoney(custoMes)}</div></div>
+        <div class="card stat"><div class="label">Lucro estimado (mês)</div><div class="value">${fmtMoney(lucroMes)}</div><div class="delta">custo insumos: ${fmtMoney(custoMes)} · comissões: ${fmtMoney(comissaoMes)}</div></div>
         <div class="card stat"><div class="label">Itens vendidos hoje</div><div class="value">${itensHoje}</div><div class="delta">${vendasHoje.length} venda(s) hoje</div></div>
         <div class="card stat"><div class="label">Alertas de estoque</div><div class="value">${lowInsumos+lowProdutos}</div><div class="delta ${(lowInsumos+lowProdutos)?'down':''}">${lowProdutos} produto(s) · ${lowInsumos} insumo(s)</div></div>
       </div>
@@ -1526,15 +1531,45 @@ ${baseConfig.cuidados}
       if (id) {
         const prod = DB.producoes.find(p => p.id === id);
         if (prod) {
-          const diff = qtd - prod.quantidade;
+          const produtoAnt = findProduto(prod.produtoId);
+          const itens = prod.itens || [];
+          const disponiveis = itens.filter(bipItemDisponivel);
+          const usados = itens.length - disponiveis.length;
+
+          if (prod.produtoId !== produtoId) {
+            if (usados > 0) return toast('Não é possível trocar o produto: ' + usados + ' etiqueta(s) deste lote já foram baixadas (vendidas, doadas ou perdidas).', 'err');
+            if (!confirm('Trocar o produto gera novos códigos de etiqueta para este lote. As etiquetas já impressas deixam de valer e precisam ser reimpressas. Continuar?')) return;
+            if (produtoAnt) {
+              produtoAnt.estoque = Math.max(0, produtoAnt.estoque - prod.quantidade);
+              deduzInsumos(produtoAnt, -prod.quantidade);
+            }
+            produto.estoque += qtd;
+            deduzInsumos(produto, qtd);
+            prod.itens = Array.from({ length: qtd }, (_, i) => ({ codigo: `${produto.sku}-${prod.lote}-${i + 1}`, status: 'disponivel' }));
+          } else {
+            const diff = qtd - prod.quantidade;
+            if (diff < 0 && disponiveis.length < -diff) {
+              return toast('Este lote só tem ' + disponiveis.length + ' etiqueta(s) disponível(is); não dá para reduzir para ' + qtd + '.', 'err');
+            }
+            if (diff > 0) {
+              const max = itens.reduce((m, it) => Math.max(m, parseInt(String(it.codigo).split('-').pop(), 10) || 0), 0);
+              for (let i = 1; i <= diff; i++) itens.push({ codigo: `${produto.sku}-${prod.lote}-${max + i}`, status: 'disponivel' });
+            } else if (diff < 0) {
+              let resta = -diff;
+              for (let i = itens.length - 1; i >= 0 && resta > 0; i--) {
+                if (bipItemDisponivel(itens[i])) { itens.splice(i, 1); resta--; }
+              }
+            }
+            prod.itens = itens;
+            if (diff !== 0) {
+              produto.estoque = Math.max(0, produto.estoque + diff);
+              deduzInsumos(produto, diff);
+            }
+          }
           prod.quantidade = qtd;
           prod.produtoId = produtoId;
           prod.dataFabricacao = dataFab;
           prod.dataValidade = dataVal;
-          produto.estoque = Math.max(0, produto.estoque + diff);
-          if (diff !== 0) {
-            deduzInsumos(produto, diff);
-          }
         }
       } else {
         const lote = 'L' + Date.now().toString().slice(-6);
@@ -1568,14 +1603,15 @@ ${baseConfig.cuidados}
     }
 
     function deletarProducao(id) {
-      if (!confirm('Deseja excluir este registro de produção?')) return;
       const prod = DB.producoes.find(p => p.id === id);
-      if (prod) {
-        const produto = findProduto(prod.produtoId);
-        if (produto) {
-          produto.estoque = Math.max(0, produto.estoque - prod.quantidade);
-        }
-      }
+      if (!prod) return;
+      const disp = Array.isArray(prod.itens) ? prod.itens.filter(bipItemDisponivel).length : prod.quantidade;
+      const usados = Array.isArray(prod.itens) ? prod.itens.length - disp : 0;
+      const msg = 'Deseja excluir este registro de produção?\n\n' + disp + ' unidade(s) ainda disponíveis serão retiradas do estoque.' +
+        (usados > 0 ? '\n' + usados + ' já baixada(s) (vendas, doações ou perdas) não serão descontadas de novo.' : '');
+      if (!confirm(msg)) return;
+      const produto = findProduto(prod.produtoId);
+      if (produto) produto.estoque = Math.max(0, produto.estoque - disp);
       DB.producoes = DB.producoes.filter(p => p.id !== id);
       persist('produtos', 'producoes');
       render();
@@ -1587,7 +1623,7 @@ ${baseConfig.cuidados}
       const rows = lista.map(v => `
         <tr>
           <td><span class="mono">${fmtDateTime(v.data)}</span></td>
-          <td>${v.itens.map(i => `${i.qty}x ${(findProduto(i.produtoId)||{}).nome||'—'}`).join(', ')}</td>
+          <td>${v.itens.map(i => `${i.qty}x ${(findProduto(i.produtoId)||{}).nome||'—'}`).join(', ')}${etiquetasDaVenda(v)}</td>
           <td><b>${fmtMoney(vendasFaturamento(v))}</b></td>
           <td>${v.origem === 'bipagem' ? '<span class="badge badge-muted">Bipagem</span>' : '<span class="badge badge-muted">Manual</span>'}</td>
           <td style="text-align:right;">
@@ -1647,11 +1683,11 @@ ${baseConfig.cuidados}
               ${venda && venda.codigo ? `<p class="hint">Vinculada ao código de etiqueta <b>${esc(venda.codigo)}</b>. Editar aqui corrige os dados da venda; para liberar o item novamente, exclua a venda em vez de editá-la.</p>` : ''}
               <div class="field">
                 <label>Produto</label>
-                <select id="vendaProdutoId" class="input">
+                <select id="vendaProdutoId" class="input" onchange="atualizarEtiquetasVenda()">
                   ${DB.produtos.map(p => `<option value="${p.id}" ${item && item.produtoId === p.id ? 'selected' : ''}>${esc(p.nome)} - ${fmtMoney(p.preco)}</option>`).join('')}
                 </select>
               </div>
-              <div class="field-row">
+              ${venda ? `<div class="field-row">
                 <div class="field">
                   <label>Quantidade</label>
                   <input type="number" id="vendaQtd" class="input" value="${item ? item.qty : 1}">
@@ -1664,8 +1700,9 @@ ${baseConfig.cuidados}
               <div class="field">
                 <label>Local / Canal de Venda</label>
                 <input type="text" id="vendaCanal" class="input" value="${esc(venda?.localCanal || 'Venda de campo')}" placeholder="Ex.: Praça, porta a porta, evento...">
-              </div>
+              </div>` : ''}
               ${campoVendedorVenda(venda)}
+              ${caixaEtiquetasVenda(venda)}
             </div>
             <div class="modal-foot">
               <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
@@ -1677,12 +1714,85 @@ ${baseConfig.cuidados}
       document.getElementById('modalRoot').innerHTML = content;
     }
 
+    // Escolha opcional das etiquetas na venda manual
+    function etiquetasParaVenda(produtoId, venda) {
+      const meus = new Set(venda && Array.isArray(venda.etiquetasBaixadas) ? venda.etiquetasBaixadas : []);
+      const out = [];
+      (DB.producoes || []).filter(pr => pr.produtoId === produtoId)
+        .slice().sort((a, b) => String(a.dataValidade || '').localeCompare(String(b.dataValidade || '')))
+        .forEach(pr => (pr.itens || []).forEach(it => {
+          if (!it.status || it.status === 'disponivel' || meus.has(it.codigo)) out.push({ it, pr, meu: meus.has(it.codigo) });
+        }));
+      return out;
+    }
+    function listaEtiquetasVenda(produtoId, venda) {
+      const lista = etiquetasParaVenda(produtoId, venda);
+      if (!lista.length) return '<p class="hint">Sem etiquetas disponíveis para este produto.</p>';
+      return '<div style="max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 10px;">' + lista.map(e =>
+        `<label style="display:flex;gap:8px;align-items:center;padding:4px 2px;margin:0;text-transform:none;cursor:pointer;"><input type="checkbox" class="chk-etq-venda" value="${esc(e.it.codigo)}" ${e.meu ? 'checked' : ''} onchange="contarEtiquetasVenda()" style="width:18px;height:18px;accent-color:var(--wine,#7a1f3d);"><span class="mono">${esc(e.it.codigo)}</span><span class="hint">val. ${fmtDate(e.pr.dataValidade)}</span></label>`
+      ).join('') + '</div>';
+    }
+    function caixaEtiquetasVenda(venda) {
+      if (venda && (venda.origem === 'bipagem' || !Array.isArray(venda.etiquetasBaixadas))) return '';
+      const produtoId = venda ? (venda.itens[0] || {}).produtoId : ((DB.produtos[0] || {}).id || '');
+      return `<div class="field" id="vendaEtiquetasBox" data-venda="${venda ? esc(venda.id) : ''}">
+        <label>Etiquetas vendidas</label>
+        <div id="vendaEtiquetasLista">${listaEtiquetasVenda(produtoId, venda)}</div>
+      </div>`;
+    }
+    function atualizarEtiquetasVenda() {
+      const box = document.getElementById('vendaEtiquetasBox');
+      const sel = document.getElementById('vendaProdutoId');
+      if (!box || !sel) return;
+      const venda = box.dataset.venda ? DB.vendas.find(v => v.id === box.dataset.venda) : null;
+      document.getElementById('vendaEtiquetasLista').innerHTML = listaEtiquetasVenda(sel.value, venda);
+    }
+    function contarEtiquetasVenda() {
+      const n = document.querySelectorAll('.chk-etq-venda:checked').length;
+      const q = document.getElementById('vendaQtd');
+      if (q && n > 0) q.value = n;
+    }
+    function etiquetasDaVenda(v) {
+      const c = (v.origem === 'bipagem' && v.codigo) ? [v.codigo] : (Array.isArray(v.etiquetasBaixadas) ? v.etiquetasBaixadas : []);
+      if (!c.length) return '';
+      const txt = c.length > 3 ? c.slice(0, 3).join(', ') + ' +' + (c.length - 3) : c.join(', ');
+      return `<br><small class="mono" style="opacity:.65;">${esc(txt)}</small>`;
+    }
+
+    // Vendas manuais também dão baixa nas etiquetas (as de validade mais próxima primeiro)
+    function baixarEtiquetasDoProduto(produtoId, qty, escolhidas) {
+      const cods = [];
+      (escolhidas || []).forEach(c => {
+        if (cods.length >= qty) return;
+        const a = findItemByCode(c);
+        if (a && a.item && a.producao.produtoId === produtoId && (!a.item.status || a.item.status === 'disponivel')) {
+          a.item.status = 'vendido'; cods.push(a.item.codigo);
+        }
+      });
+      const prods = (DB.producoes || []).filter(pr => pr.produtoId === produtoId)
+        .slice().sort((x, y) => String(x.dataValidade || '').localeCompare(String(y.dataValidade || '')));
+      for (const pr of prods) {
+        for (const it of (pr.itens || [])) {
+          if (cods.length >= qty) return cods;
+          if (!it.status || it.status === 'disponivel') { it.status = 'vendido'; cods.push(it.codigo); }
+        }
+      }
+      return cods;
+    }
+    function devolverEtiquetas(cods) {
+      (cods || []).forEach(c => { const a = findItemByCode(c); if (a && a.item) a.item.status = 'disponivel'; });
+    }
+
     function salvarVenda(id) {
       const produtoId = document.getElementById('vendaProdutoId').value;
-      const qty = parseInt(document.getElementById('vendaQtd').value) || 0;
+      const escolhidas = [...document.querySelectorAll('.chk-etq-venda:checked')].map(c => c.value);
+      const qtdEl = document.getElementById('vendaQtd');
+      const qty = qtdEl ? (parseInt(qtdEl.value) || 0) : (escolhidas.length || 1);
       const dataHoraEl = document.getElementById('vendaDataHora');
       const produto = findProduto(produtoId);
       if (!produto || qty <= 0) return toast('Quantidade inválida', 'err');
+
+      if (qtdEl && escolhidas.length && escolhidas.length !== qty) return toast('Você marcou ' + escolhidas.length + ' etiqueta(s), mas a quantidade é ' + qty + '. Ajuste a quantidade ou as etiquetas marcadas.', 'err');
 
       const selVendedor = document.getElementById('vendaVendedor');
       const destUid = selVendedor && !selVendedor.disabled ? selVendedor.value : '';
@@ -1692,17 +1802,21 @@ ${baseConfig.cuidados}
         const idx = DB.vendas.findIndex(v => v.id === id);
         if (idx === -1) return toast('Venda não encontrada', 'err');
         const vendaAntiga = DB.vendas[idx];
+        const rastreiaEtiquetas = vendaAntiga.origem !== 'bipagem' && Array.isArray(vendaAntiga.etiquetasBaixadas);
+        if (rastreiaEtiquetas) devolverEtiquetas(vendaAntiga.etiquetasBaixadas);
         vendaAntiga.itens.forEach(it => {
           const p = findProduto(it.produtoId);
           if (p) p.estoque = p.estoque + it.qty;
         });
         produto.estoque = Math.max(0, produto.estoque - qty);
 
+        const novasEtiquetas = rastreiaEtiquetas ? baixarEtiquetasDoProduto(produtoId, qty, escolhidas) : null;
         const trocouVendedor = !!destUser && destUser.uid !== (vendaAntiga.vendedorUid || '');
         DB.vendas[idx] = {
           ...vendaAntiga,
           data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : vendaAntiga.data,
           itens: [{ produtoId, qty, preco: produto.preco }],
+          ...(novasEtiquetas ? { etiquetasBaixadas: novasEtiquetas } : {}),
           localCanal: document.getElementById('vendaCanal')?.value?.trim() || vendaAntiga.localCanal || 'Venda de campo',
           vendedorUid: trocouVendedor ? destUser.uid : (vendaAntiga.vendedorUid || window.currentFirebaseUser?.uid || ''),
           vendedorEmail: trocouVendedor ? (destUser.email || '') : (vendaAntiga.vendedorEmail || window.currentFirebaseUser?.email || ''),
@@ -1711,7 +1825,7 @@ ${baseConfig.cuidados}
         };
         if (window.salvarVendaFirestore) window.salvarVendaFirestore(DB.vendas[idx]);
 
-        persist('produtos', 'vendas');
+        persist('produtos', 'vendas', 'producoes');
         fecharModalDirect();
         render();
         toast('Venda atualizada com sucesso!', 'ok');
@@ -1720,11 +1834,13 @@ ${baseConfig.cuidados}
 
       produto.estoque = Math.max(0, produto.estoque - qty);
 
+      const etiquetasBaixadas = baixarEtiquetasDoProduto(produtoId, qty, escolhidas);
       const vendaNova = {
         id: uid(),
         data: dataHoraEl && dataHoraEl.value ? datetimeLocalToISO(dataHoraEl.value) : nowISO(),
         itens: [{ produtoId, qty, preco: produto.preco }],
         origem: 'manual',
+        etiquetasBaixadas,
         localCanal: document.getElementById('vendaCanal')?.value?.trim() || 'Venda de campo',
         vendedorUid: destUser ? destUser.uid : (window.currentFirebaseUser?.uid || ''),
         vendedorEmail: destUser ? (destUser.email || '') : (window.currentFirebaseUser?.email || ''),
@@ -1734,7 +1850,7 @@ ${baseConfig.cuidados}
       DB.vendas.push(vendaNova);
       if (window.salvarVendaFirestore) window.salvarVendaFirestore(vendaNova);
 
-      persist('produtos', 'vendas');
+      persist('produtos', 'vendas', 'producoes');
       fecharModalDirect();
       render();
       toast('Venda registrada com sucesso!', 'ok');
@@ -1749,6 +1865,8 @@ ${baseConfig.cuidados}
         const p = findProduto(it.produtoId);
         if (p) p.estoque = p.estoque + it.qty;
       });
+
+      if (Array.isArray(venda.etiquetasBaixadas)) devolverEtiquetas(venda.etiquetasBaixadas);
 
       if (venda.origem === 'bipagem' && venda.codigo) {
         const achado = findItemByCode(venda.codigo);
@@ -1775,6 +1893,7 @@ ${baseConfig.cuidados}
         });
       });
       DB.caixa.forEach(c => lista.push({ ...c, origem: 'manual' }));
+      (window.lancamentosComissaoCaixa ? window.lancamentosComissaoCaixa() : []).forEach(c => lista.push(c));
 
       lista.sort((a, b) => a.data < b.data ? -1 : (a.data > b.data ? 1 : 0));
 
@@ -1821,7 +1940,7 @@ ${baseConfig.cuidados}
           <td style="text-align:right;">
             ${l.origem === 'manual'
               ? `<button class="icon-btn" onclick="modalCaixa('${l.id}')">✏️ Edit</button><button class="icon-btn" onclick="deletarCaixa('${l.id}')">🗑️</button>`
-              : '<span class="badge badge-muted">Venda</span>'}
+              : (l.origem === 'comissao' ? '<span class="badge badge-muted">Acerto</span>' : '<span class="badge badge-muted">Venda</span>')}
           </td>
         </tr>
       `).join('');
@@ -2001,15 +2120,23 @@ ${baseConfig.cuidados}
             </select>
           </div>
 
-          <div style="max-width:320px;margin:16px auto;">
-            <input type="text" id="bipInput" class="input scan-input" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)" autocomplete="off">
+          <div class="field" style="max-width:320px;margin:16px auto 0;text-align:left;">
+            <label>Etiqueta</label>
+            <button type="button" class="bip-box" onclick="abrirSeletorBip()"><span>Selecionar etiqueta</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;flex-shrink:0;"><path d="M2 4l4 4 4-4"/></svg></button>
           </div>
 
-          <button class="btn btn-secondary" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">
-            ${scannerBipAtivo ? '⏹ Desativar Câmera' : '📷 Ativar Câmera'}
-          </button>
+          <details style="max-width:320px;margin:14px auto 16px;text-align:left;">
+            <summary class="hint" style="cursor:pointer;">Digitar o código ou usar leitor físico</summary>
+            <input type="text" id="bipInput" class="input scan-input" style="margin-top:8px;" placeholder="Código ex: PLH-TRAD-..." onkeydown="processarBip(event)" autocomplete="off">
+          </details>
+
+          <div style="max-width:320px;margin:0 auto;">
+            <button type="button" class="bip-box center" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">${scannerBipAtivo ? 'Desativar Câmera' : 'Ativar Câmera'}</button>
+          </div>
 
           <div id="cameraReader" style="margin:18px auto 0;"></div>
+
+          <div id="bipConferencia">${bipConferenciaCard()}</div>
 
           <div class="divider"></div>
           <div class="table-wrap" style="text-align:left;">
@@ -2030,6 +2157,131 @@ ${baseConfig.cuidados}
       `;
     }
 
+    // ---------- Seletor: receita em estoque -> etiqueta disponível ----------
+    function bipItemDisponivel(it) { return !it.status || it.status === 'disponivel'; }
+
+    function bipProdutosDisponiveis() {
+      const mapa = {};
+      (DB.producoes || []).forEach(pr => {
+        const n = (pr.itens || []).filter(bipItemDisponivel).length;
+        if (n > 0) mapa[pr.produtoId] = (mapa[pr.produtoId] || 0) + n;
+      });
+      return Object.keys(mapa)
+        .map(id => ({ produto: findProduto(id), qtd: mapa[id] }))
+        .filter(x => x.produto)
+        .sort((a, b) => String(a.produto.nome).localeCompare(String(b.produto.nome), 'pt-BR'));
+    }
+
+    // Botão único: 1º toque escolhe a receita em estoque, 2º toque escolhe a etiqueta
+    function abrirSeletorBip(produtoId) {
+      const btnLinha = 'margin-bottom:8px;';
+      let titulo, corpo;
+      if (!produtoId) {
+        const lista = bipProdutosDisponiveis();
+        titulo = '1. Escolha a receita';
+        corpo = lista.length
+          ? lista.map(x => `<button type="button" class="bip-box" style="${btnLinha}" onclick="abrirSeletorBip('${esc(x.produto.id)}')"><span>${esc(x.produto.nome)}</span><span class="badge badge-muted">${x.qtd} em estoque</span></button>`).join('')
+          : '<p class="empty">Nenhuma receita com etiqueta disponível.</p>';
+      } else {
+        const prod = findProduto(produtoId);
+        const etiquetas = bipEtiquetasOrdenadas(produtoId);
+        titulo = '2. Escolha a etiqueta';
+        corpo = `<p style="margin:0 0 10px;"><button class="btn btn-secondary btn-sm" onclick="abrirSeletorBip()">← Receitas</button> <b>${esc(prod ? prod.nome : '')}</b></p>` +
+          (etiquetas.length
+            ? etiquetas.map(e => `<button type="button" class="bip-box" style="${btnLinha}" onclick="escolherEtiquetaBip('${esc(e.it.codigo)}')"><span class="mono">${esc(e.it.codigo)}</span><span class="hint">Lote ${esc(e.pr.lote || '—')} · val. ${fmtDate(e.pr.dataValidade)}</span></button>`).join('')
+            : '<p class="empty">Sem etiquetas disponíveis.</p>');
+      }
+      document.getElementById('modalRoot').innerHTML = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal" style="max-width:440px;">
+            <div class="modal-head"><h3>${titulo}</h3><button class="modal-close" onclick="fecharModalDirect()">×</button></div>
+            <div class="modal-body" style="max-height:60vh;overflow:auto;">${corpo}</div>
+          </div>
+        </div>`;
+    }
+
+    function escolherEtiquetaBip(codigo) {
+      fecharModalDirect();
+      processarBipagemCodigo(codigo);
+    }
+
+    // ---------- Conferência: estoque do sistema x etiquetas disponíveis (admin) ----------
+    function bipDivergencias() {
+      return (DB.produtos || []).map(p => {
+        const disp = (DB.producoes || []).filter(pr => pr.produtoId === p.id)
+          .reduce((t, pr) => t + (pr.itens || []).filter(bipItemDisponivel).length, 0);
+        const est = Math.max(0, Number(p.estoque) || 0);
+        return { produto: p, disp, est, diff: disp - est };
+      }).filter(x => x.diff !== 0);
+    }
+
+    function bipConferenciaCard() {
+      if (window.currentUserRole !== 'admin') return '';
+      const div = bipDivergencias();
+      if (!div.length) return '';
+      const linhas = div.map(x => x.diff > 0
+        ? `<tr><td>${esc(x.produto.nome)}</td><td>${x.est}</td><td>${x.disp}</td><td><b>${x.diff}</b> etiqueta(s) a mais</td><td style="text-align:right;"><button class="btn btn-gold btn-sm" onclick="abrirAjusteEtiquetas('${esc(x.produto.id)}')">Conferir etiquetas</button></td></tr>`
+        : `<tr><td>${esc(x.produto.nome)}</td><td>${x.est}</td><td>${x.disp}</td><td><b>${-x.diff}</b> unidade(s) sem etiqueta</td><td style="text-align:right;"><span class="hint">Gere etiquetas na Produção</span></td></tr>`
+      ).join('');
+      return `<div class="divider"></div>
+        <div style="text-align:left;">
+          <h3 style="margin-bottom:4px;">Conferência de estoque</h3>
+          <p class="hint">O estoque do sistema e as etiquetas disponíveis deveriam ser iguais. Corrija as diferenças abaixo.</p>
+          <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Estoque</th><th>Etiquetas disponíveis</th><th>Diferença</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+        </div>`;
+    }
+
+    function bipEtiquetasOrdenadas(produtoId) {
+      const out = [];
+      (DB.producoes || []).filter(pr => pr.produtoId === produtoId)
+        .slice().sort((a, b) => String(a.dataValidade || '').localeCompare(String(b.dataValidade || '')))
+        .forEach(pr => (pr.itens || []).filter(bipItemDisponivel).forEach(it => out.push({ it, pr })));
+      return out;
+    }
+
+    function abrirAjusteEtiquetas(produtoId) {
+      const x = bipDivergencias().find(d => d.produto.id === produtoId && d.diff > 0);
+      if (!x) return toast('Não há diferença a conferir para este produto.', 'err');
+      const lista = bipEtiquetasOrdenadas(produtoId);
+      const linhas = lista.map((e, i) => `<label style="display:flex;gap:8px;align-items:center;padding:5px 2px;text-transform:none;cursor:pointer;margin:0;">
+          <input type="checkbox" class="chk-ajuste" value="${esc(e.it.codigo)}" ${i < x.diff ? 'checked' : ''} onchange="contarAjusteEtiquetas(${x.diff})" style="width:18px;height:18px;accent-color:var(--wine,#7a1f3d);">
+          <span class="mono">${esc(e.it.codigo)}</span><span class="hint">Lote ${esc(e.pr.lote || '—')} · val. ${fmtDate(e.pr.dataValidade)}</span></label>`).join('');
+      document.getElementById('modalRoot').innerHTML = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal" style="max-width:520px;">
+            <div class="modal-head"><h3>Conferir etiquetas — ${esc(x.produto.nome)}</h3><button class="modal-close" onclick="fecharModalDirect()">×</button></div>
+            <div class="modal-body">
+              <p class="hint">O sistema tem <b>${x.est}</b> unidade(s) em estoque, mas <b>${x.disp}</b> etiquetas disponíveis. Marque as <b>${x.diff}</b> etiqueta(s) que já não existem fisicamente; as desmarcadas continuam disponíveis. Nenhuma venda é criada e o estoque não muda.</p>
+              <p style="margin:8px 0;"><b id="ajusteContador">${Math.min(x.diff, lista.length)} de ${x.diff}</b> selecionada(s)</p>
+              <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;">${linhas}</div>
+            </div>
+            <div class="modal-foot">
+              <button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button>
+              <button class="btn btn-primary" onclick="confirmarAjusteEtiquetas('${esc(produtoId)}')">Dar baixa nas marcadas</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function contarAjusteEtiquetas(alvo) {
+      const n = document.querySelectorAll('.chk-ajuste:checked').length;
+      const el = document.getElementById('ajusteContador');
+      if (el) el.textContent = n + ' de ' + alvo;
+    }
+
+    function confirmarAjusteEtiquetas(produtoId) {
+      if (window.currentUserRole !== 'admin') return toast('Somente o administrador pode ajustar etiquetas.', 'err');
+      const x = bipDivergencias().find(d => d.produto.id === produtoId && d.diff > 0);
+      if (!x) { fecharModalDirect(); return; }
+      const marcadas = [...document.querySelectorAll('.chk-ajuste:checked')].map(c => c.value);
+      if (marcadas.length !== x.diff) return toast('Marque exatamente ' + x.diff + ' etiqueta(s).', 'err');
+      marcadas.forEach(c => { const a = findItemByCode(c); if (a && a.item && bipItemDisponivel(a.item)) a.item.status = 'ajuste'; });
+      persist('producoes');
+      fecharModalDirect();
+      atualizarBipagemUI();
+      toast(marcadas.length + ' etiqueta(s) baixada(s) por ajuste de estoque.', 'ok');
+    }
+
     function renderBipagemLogRows() {
       const itens = (DB.scanlog || []).slice(-15).reverse();
       if (!itens.length) return '<tr><td colspan="3" class="empty">Nenhuma bipagem registrada ainda.</td></tr>';
@@ -2048,6 +2300,8 @@ ${baseConfig.cuidados}
     function atualizarBipagemUI() {
       const tbody = document.getElementById('bipagemLogBody');
       if (tbody) tbody.innerHTML = renderBipagemLogRows();
+      const conf = document.getElementById('bipConferencia');
+      if (conf) conf.innerHTML = bipConferenciaCard();
     }
 
     let bipagemPendente = null;
@@ -2229,7 +2483,7 @@ ${baseConfig.cuidados}
           () => {}
         ).then(() => {
           scannerBipAtivo = true;
-          if (btn) btn.textContent = '⏹ Desativar Câmera';
+          if (btn) btn.textContent = 'Desativar Câmera';
         }).catch((err) => {
           toast('Não foi possível acessar a câmera: ' + err, 'err');
         });
@@ -2245,7 +2499,7 @@ ${baseConfig.cuidados}
             html5QrScannerBip = null;
             scannerBipAtivo = false;
             const btn = document.getElementById('btnToggleScannerBip');
-            if (btn) btn.textContent = '📷 Ativar Câmera';
+            if (btn) btn.textContent = 'Ativar Câmera';
           });
       } else {
         scannerBipAtivo = false;
@@ -2511,6 +2765,8 @@ ${baseConfig.cuidados}
     window.deletarProducao = deletarProducao;
     window.modalVenda = modalVenda;
     window.salvarVenda = salvarVenda;
+    window.atualizarEtiquetasVenda = atualizarEtiquetasVenda;
+    window.contarEtiquetasVenda = contarEtiquetasVenda;
     window.deletarVenda = deletarVenda;
     window.modalCaixa = modalCaixa;
     window.salvarCaixa = salvarCaixa;
@@ -2522,6 +2778,11 @@ ${baseConfig.cuidados}
     window.viewCaixa = viewCaixa;
     window.viewProducao = viewProducao;
     window.viewBipagem = viewBipagem;
+    window.abrirSeletorBip = abrirSeletorBip;
+    window.escolherEtiquetaBip = escolherEtiquetaBip;
+    window.abrirAjusteEtiquetas = abrirAjusteEtiquetas;
+    window.contarAjusteEtiquetas = contarAjusteEtiquetas;
+    window.confirmarAjusteEtiquetas = confirmarAjusteEtiquetas;
     window.viewEtiquetas = viewEtiquetas;
     window.viewRelatorios = viewRelatorios;
     window.viewConfig = viewConfig;
@@ -2573,6 +2834,30 @@ ${baseConfig.cuidados}
   function saleCommission(v){ return saleTotal(v) * saleCommissionRate(v) / 100; }
   function saleRepasse(v){ return saleTotal(v) - saleCommission(v); }
   window.vendasFaturamento = window.vendasFaturamento || saleTotal;
+  window.saleCommission = saleCommission;
+  // Custo estimado dos insumos de uma venda (ficha técnica ÷ rendimento × quantidade)
+  function saleCost(v){
+    return (v.itens||[]).reduce((s,it)=>{
+      const p=findProduto(it.produtoId); if(!p) return s;
+      const ficha=(p.receita||[]).reduce((a,r)=>{ const ins=findInsumo(r.insumoId); return a+(ins?ins.custo*r.qtd:0); },0);
+      const rend=(p.rendimento&&p.rendimento>0)?p.rendimento:1;
+      return s+(ficha/rend)*(Number(it.qty)||0);
+    },0);
+  }
+  window.saleCost = saleCost;
+  // Comissões já acertadas viram SAÍDAS no Fluxo de Caixa (uma linha por acerto/dia)
+  window.lancamentosComissaoCaixa = function(){
+    const grupos={};
+    (DB.vendas||[]).forEach(v=>{
+      if(v.statusAcerto!=='quitado') return;
+      const c=saleCommission(v); if(!(c>0)) return;
+      const data=String(v.acertoData||v.data||'').slice(0,10);
+      const chave=(v.acertoId||('v'+v.id))+'|'+data;
+      const g=grupos[chave]||(grupos[chave]={id:'comissao-'+chave,data,tipo:'saida',categoria:'Comissão de vendedores',valor:0,qtd:0,vend:{},origem:'comissao'});
+      g.valor+=c; g.qtd++; g.vend[v.vendedorEmail||'sem vendedor']=1;
+    });
+    return Object.values(grupos).map(g=>({...g,descricao:'Acerto com '+Object.keys(g.vend).join(', ')+' · '+g.qtd+' venda(s)'}));
+  };
 
   async function salvarVendaFirestore(venda){
     if (!window.db || !window.doc || !window.setDoc) return;
@@ -2802,7 +3087,7 @@ ${baseConfig.cuidados}
     const resumo=comissaoResumo(lista); const id=uid();
     try{
       await window.setDoc(window.doc(window.db,'acertos',id),{id, vendedorUid:window.__comissaoVendedor, periodo:window.__comissaoFiltro,totalVendido:resumo.vendas,comissao:resumo.comissao,valorRepassar:resumo.repasse,vendaIds:lista.map(v=>v.id),realizadoPor:window.currentFirebaseUser?.uid||'',realizadoEm:window.serverTimestamp()});
-      lista.forEach(v=>{ v.statusAcerto='quitado'; v.acertoId=id; });
+      lista.forEach(v=>{ v.statusAcerto='quitado'; v.acertoId=id; v.acertoData=nowISO(); });
       await Promise.all(lista.map(v=>salvarVendaFirestore(v)));
       await saveKey('vendas',DB.vendas);
       toast('Prestação de contas quitada e zerada para o período.','ok'); render();
@@ -2817,12 +3102,12 @@ ${baseConfig.cuidados}
       if(quitar){
         const id=uid();
         await window.setDoc(window.doc(window.db,'acertos',id),{id, vendedorUid:saleVendorUid(v)||window.__comissaoVendedor, periodo:'individual', totalVendido:saleTotal(v), comissao:saleCommission(v), valorRepassar:saleRepasse(v), vendaIds:[v.id], realizadoPor:window.currentFirebaseUser?.uid||'', realizadoEm:window.serverTimestamp()});
-        v.statusAcerto='quitado'; v.acertoId=id; v.acertoTipo='individual';
+        v.statusAcerto='quitado'; v.acertoId=id; v.acertoTipo='individual'; v.acertoData=nowISO();
       } else {
         if(v.acertoTipo==='individual' && v.acertoId && window.deleteDoc){
           try{ await window.deleteDoc(window.doc(window.db,'acertos',v.acertoId)); }catch(e){ console.error(e); }
         }
-        v.statusAcerto='pendente'; v.acertoId=null; v.acertoTipo=null;
+        v.statusAcerto='pendente'; v.acertoId=null; v.acertoTipo=null; v.acertoData=null;
       }
       await salvarVendaFirestore(v);
       await saveKey('vendas',DB.vendas);
@@ -2901,13 +3186,55 @@ ${baseConfig.cuidados}
       toast(alvo.length+' venda(s) transferida(s) para '+(dest.email||dest.uid)+'.','ok'); render();
     }catch(e){toast('Erro ao transferir vendas: '+e.message,'err');}
   };
+  // Custo unitário (insumos) de cada produto em estoque, pela ficha técnica
+  function custoUnitarioProduto(p){
+    const ficha=(p.receita||[]).reduce((a,r)=>{ const ins=findInsumo(r.insumoId); return a+(ins?ins.custo*r.qtd:0); },0);
+    const rend=(p.rendimento&&p.rendimento>0)?p.rendimento:1;
+    return (p.receita&&p.receita.length)?ficha/rend:null;
+  }
+  function cardCustoUnitarioEstoque(){
+    const prods=(DB.produtos||[]).filter(p=>(Number(p.estoque)||0)>0).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+    let totalEstoque=0;
+    const linhas=prods.map(p=>{
+      const cu=custoUnitarioProduto(p); const preco=Number(p.preco)||0; const q=Number(p.estoque)||0;
+      if(cu!==null) totalEstoque+=cu*q;
+      const margem=cu!==null?preco-cu:null;
+      return `<tr><td>${esc(p.nome)}</td><td>${q}</td><td>${cu!==null?fmtMoney(cu):'<span class="hint">sem ficha técnica</span>'}</td><td>${fmtMoney(preco)}</td><td>${margem!==null?fmtMoney(margem):'—'}</td><td>${cu!==null?fmtMoney(cu*q):'—'}</td></tr>`;
+    }).join('');
+    return `<div class="card card-pad" style="margin-bottom:20px"><div class="section-title" style="margin-top:0"><h2>Custo unitário por produto em estoque</h2><span class="hint">Custo de insumos pela ficha técnica · estoque atual: ${fmtMoney(totalEstoque)}</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Em estoque</th><th>Custo unitário</th><th>Preço de venda</th><th>Margem por un.</th><th>Custo do estoque</th></tr></thead><tbody>${linhas||'<tr><td colspan="6" class="empty">Nenhum produto com estoque no momento.</td></tr>'}</tbody></table></div></div>`;
+  }
+  // Demonstrativo do período (somente admin): faturamento, custo, comissões e pró-labore
+  function demonstrativoComissao(lista){
+    const fat=lista.reduce((t,v)=>t+saleTotal(v),0);
+    const custo=lista.reduce((t,v)=>t+saleCost(v),0);
+    const com=lista.reduce((t,v)=>t+saleCommission(v),0);
+    const apurado=fat-custo-com;
+    const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const {inicio,fim}=periodoComissao(); const di=ymd(inicio), df=ymd(fim);
+    const todos=window.__comissaoVendedor==='todos';
+    const retiradas=todos?(DB.caixa||[]).filter(c=>c.tipo==='saida'&&/pr[óo]-?labore|retirada/i.test(c.categoria||'')&&c.data>=di&&c.data<=df).reduce((t,c)=>t+(Number(c.valor)||0),0):0;
+    const saldo=apurado-retiradas;
+    const cor=saldo>=0?'#2f7d4f':'#b3392f';
+    const rotulo=saldo>=0?'A creditar':'A debitar';
+    const nota=todos?`Apurado ${fmtMoney(apurado)} − retiradas no caixa ${fmtMoney(retiradas)}`:'Escolha "Todos os vendedores" para abater as retiradas do caixa';
+    return `<div class="section-title" style="margin-top:0"><h2>Demonstrativo do período</h2><span class="hint">Faturamento − custo dos produtos − comissões = pró-labore apurado</span></div>
+      <div style="display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:20px">
+        <div class="card stat"><div class="label">Faturamento</div><div class="value">${fmtMoney(fat)}</div><div class="delta">${lista.length} venda(s) no período</div></div>
+        <div class="card stat"><div class="label">Custo dos produtos</div><div class="value">${fmtMoney(custo)}</div><div class="delta">Insumos pela ficha técnica</div></div>
+        <div class="card stat"><div class="label">Comissões</div><div class="value">${fmtMoney(com)}</div><div class="delta">Devidas aos vendedores</div></div>
+        <div class="card stat"><div class="label">Pró-labore apurado</div><div class="value">${fmtMoney(apurado)}</div><div class="delta">Sobra do período</div></div>
+        <div class="card stat" style="border:1.5px solid ${cor}"><div class="label">Pró-labore ${rotulo.toLowerCase()}</div><div class="value" style="color:${cor}">${fmtMoney(Math.abs(saldo))}</div><div class="delta">${nota}</div></div>
+      </div>${cardCustoUnitarioEstoque()}`;
+  }
   window.viewComissoes = function(){
     let vendedores=[];
     if(isAdmin()) vendedores=window.__usersCache.filter(u=>u.role==='vendedor');
-    const lista=vendasComissao(); const r=comissaoResumo(lista); const selN=vendasSelecionadasComissao().length; const pendN=lista.filter(v=>v.statusAcerto!=='quitado').length;
+    const lista=vendasComissao(); const r=comissaoResumo(lista); const demo=isAdmin()?demonstrativoComissao(lista):''; const selN=vendasSelecionadasComissao().length; const pendN=lista.filter(v=>v.statusAcerto!=='quitado').length;
     const seletor=isAdmin()?`<div class="field"><label>Vendedor</label><select class="input" onchange="window.__comissaoVendedor=this.value; window.__comissaoSel={}; render()"><option value="todos" ${window.__comissaoVendedor==='todos'?'selected':''}>Todos os vendedores</option>${vendedores.map(u=>`<option value="${esc(u.uid)}" ${window.__comissaoVendedor===u.uid?'selected':''}>${esc(u.email||u.uid)} · ${Number(u.comissaoPorcentagem??20)}%</option>`).join('')}</select></div>`:`<div class="help-note"><b>Comissão atual:</b> ${Number(window.currentUserComissao)}% · este painel mostra somente suas próprias vendas.</div>`;
-    const rows=lista.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{const t=saleTotal(v),c=saleCommission(v),rp=saleRepasse(v),item=v.itens?.[0]||{}; const p=findProduto(item.produtoId); return `<tr>${isAdmin()?`<td style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" class="chk-comissao" data-id="${esc(v.id)}" ${v.statusAcerto==='quitado'?'disabled':''} ${window.__comissaoSel[v.id]&&v.statusAcerto!=='quitado'?'checked':''} onchange="toggleSelComissao('${esc(v.id)}',this.checked)"></label></td>`:''}<td class="mono">${fmtDateTime(v.data)}</td><td>${esc(p?.nome||item.produtoId||'—')}</td><td>${item.qty||0}</td><td>${esc(v.localCanal||'—')}</td>${isAdmin()?`<td>${esc(v.vendedorEmail||'—')}</td>`:''}<td>${fmtMoney(t)}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(c)}</td><td>${fmtMoney(rp)}</td><td>${v.statusAcerto==='quitado'?'<span class="badge badge-ok">Quitado</span>':'<span class="badge badge-warn">Pendente</span>'}</td>${isAdmin()?`<td style="text-align:right;white-space:nowrap">${v.statusAcerto==='quitado'?`<button class="btn btn-secondary btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',false)">Desfazer</button>`:`<button class="btn btn-gold btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',true)">✓ Quitar</button>`}</td>`:''}</tr>`}).join('');
+    const rows=lista.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{const t=saleTotal(v),c=saleCommission(v),rp=saleRepasse(v),item=v.itens?.[0]||{}; const p=findProduto(item.produtoId); return `<tr>${isAdmin()?`<td style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" class="chk-comissao" data-id="${esc(v.id)}" ${v.statusAcerto==='quitado'?'disabled':''} ${window.__comissaoSel[v.id]&&v.statusAcerto!=='quitado'?'checked':''} onchange="toggleSelComissao('${esc(v.id)}',this.checked)"></label></td>`:''}<td class="mono">${fmtDateTime(v.data)}</td><td>${esc(p?.nome||item.produtoId||'—')}</td><td>${item.qty||0}</td><td>${esc(v.localCanal||'—')}</td>${isAdmin()?`<td>${esc(v.vendedorEmail||'—')}</td>`:''}<td>${fmtMoney(t)}${isAdmin()?`<br><small class="mono" style="opacity:.65">custo ${fmtMoney(saleCost(v))}</small>`:''}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(c)}</td><td>${fmtMoney(rp)}</td><td>${v.statusAcerto==='quitado'?'<span class="badge badge-ok">Quitado</span>':'<span class="badge badge-warn">Pendente</span>'}</td>${isAdmin()?`<td style="text-align:right;white-space:nowrap">${v.statusAcerto==='quitado'?`<button class="btn btn-secondary btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',false)">Desfazer</button>`:`<button class="btn btn-gold btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',true)">✓ Quitar</button>`}</td>`:''}</tr>`}).join('');
     return `${seletor}<div class="pill-tabs" style="margin-bottom:16px"><button class="pill-tab ${window.__comissaoFiltro==='hoje'?'active':''}" onclick="window.__comissaoFiltro='hoje';window.__comissaoSel={};render()">Hoje</button><button class="pill-tab ${window.__comissaoFiltro==='7dias'?'active':''}" onclick="window.__comissaoFiltro='7dias';window.__comissaoSel={};render()">7 dias</button><button class="pill-tab ${window.__comissaoFiltro==='mes'?'active':''}" onclick="window.__comissaoFiltro='mes';window.__comissaoSel={};render()">Mês Atual</button></div>
+      ${demo}
       <div class="grid grid-3"><div class="card stat"><div class="label">Total Vendido</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">Pendente de acerto</div></div><div class="card stat"><div class="label">Comissão do Vendedor</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Ganhos no período</div></div><div class="card stat"><div class="label">Valor a Repassar</div><div class="value">${fmtMoney(r.repasse)}</div><div class="delta">Prestação de contas pendente</div></div></div>
       ${isAdmin()?`<div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin:16px 0"><button id="btnTransfSel" class="btn btn-secondary" onclick="abrirTransferenciaVendas()">⇄ Transferir selecionadas (${selN})</button><button class="btn btn-gold" onclick="marcarAcertoRealizado()">✓ Marcar Acerto Realizado / Quitar Prestação</button></div>`:''}
       <div class="card card-pad"><div class="section-title" style="margin-top:0"><h2>Extrato de Vendas</h2><span class="hint">${lista.length} lançamento(s) no período</span></div><div class="table-wrap"><table><thead><tr>${isAdmin()?`<th style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" id="chkTodasComissao" class="chk-comissao" title="Selecionar todas as pendentes" ${pendN>0&&selN===pendN?'checked':''} onchange="toggleSelTodasComissao(this.checked)"></label></th>`:''}<th>Data/Hora</th><th>Produto/Sabor</th><th>Qtd.</th><th>Local/Canal</th>${isAdmin()?'<th>Vendedor</th>':''}<th>Valor Total</th><th>% Comissão</th><th>Comissão R$</th><th>Repassar R$</th><th>Status</th>${isAdmin()?'<th style="text-align:right">Ação</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${isAdmin()?12:9}" class="empty">Nenhuma venda no período selecionado.</td></tr>`}</tbody></table></div></div>`;
