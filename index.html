@@ -360,6 +360,11 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   .bip-box:hover { background: var(--surface-2); }
   .bip-box:focus { outline: 2px solid var(--wine-light); border-color: var(--wine); }
   .bip-box.center { justify-content: center; text-align: center; }
+  .bip-brown { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; box-sizing: border-box; padding: 11px 14px; border-radius: 9px; border: 1px solid var(--wine); background-color: var(--wine); color: #fff; font-size: 14px; font-weight: 700; font-family: 'Manrope'; text-align: left; cursor: pointer; }
+  .bip-brown:hover { filter: brightness(1.08); }
+  .bip-brown.center { justify-content: center; text-align: center; }
+  select.bip-brown { display: block; appearance: none; -webkit-appearance: none; padding-right: 36px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
+  select.bip-brown option { color: var(--ink); background: #fff; font-weight: 400; }
   input[type="range"].input { padding: 0; border: none; background: transparent; accent-color: var(--wine, #7a1f3d); height: 28px; }
   label { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
   .field { margin-bottom: 14px; }
@@ -1627,8 +1632,8 @@ ${baseConfig.cuidados}
           <td><b>${fmtMoney(vendasFaturamento(v))}</b></td>
           <td>${v.origem === 'bipagem' ? '<span class="badge badge-muted">Bipagem</span>' : '<span class="badge badge-muted">Manual</span>'}</td>
           <td style="text-align:right;">
-            <button class="icon-btn" onclick="modalVenda('${v.id}')">✏️ Edit</button>
-            <button class="icon-btn" onclick="deletarVenda('${v.id}')">🗑️</button>
+            ${(window.currentUserRole === 'vendedor' && v.baixaPendente === false) ? '' : `<button class="icon-btn" onclick="modalVenda('${v.id}')">✏️ Edit</button>
+            <button class="icon-btn" onclick="deletarVenda('${v.id}')">🗑️</button>`}
           </td>
         </tr>
       `).join('');
@@ -1841,6 +1846,7 @@ ${baseConfig.cuidados}
         itens: [{ produtoId, qty, preco: produto.preco }],
         origem: 'manual',
         etiquetasBaixadas,
+        baixaPendente: window.currentUserRole === 'vendedor',
         localCanal: document.getElementById('vendaCanal')?.value?.trim() || 'Venda de campo',
         vendedorUid: destUser ? destUser.uid : (window.currentFirebaseUser?.uid || ''),
         vendedorEmail: destUser ? (destUser.email || '') : (window.currentFirebaseUser?.email || ''),
@@ -2113,16 +2119,12 @@ ${baseConfig.cuidados}
 
           <div class="field" style="max-width:320px;margin:18px auto 0;text-align:left;">
             <label>Tipo de Operação</label>
-            <select id="bipTipo" class="input" onchange="BIPAGEM_TIPO = this.value">
-              <option value="venda" ${BIPAGEM_TIPO === 'venda' ? 'selected' : ''}>Venda Avulsa</option>
-              <option value="doacao" ${BIPAGEM_TIPO === 'doacao' ? 'selected' : ''}>Doação</option>
-              <option value="perda" ${BIPAGEM_TIPO === 'perda' ? 'selected' : ''}>Perda / Avaria</option>
-            </select>
+            <button type="button" id="btnBipTipo" class="bip-brown" onclick="abrirSeletorTipoBip()"><span id="bipTipoTexto">${TIPO_BIP_LABELS[BIPAGEM_TIPO] || 'Venda Avulsa'}</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M2 4l4 4 4-4"/></svg></button>
           </div>
 
           <div class="field" style="max-width:320px;margin:16px auto 0;text-align:left;">
             <label>Etiqueta</label>
-            <button type="button" class="bip-box" onclick="abrirSeletorBip()"><span>Selecionar etiqueta</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;flex-shrink:0;"><path d="M2 4l4 4 4-4"/></svg></button>
+            <button type="button" class="bip-brown" onclick="abrirSeletorBip()"><span>Selecionar etiqueta</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M2 4l4 4 4-4"/></svg></button>
           </div>
 
           <details style="max-width:320px;margin:14px auto 16px;text-align:left;">
@@ -2131,7 +2133,7 @@ ${baseConfig.cuidados}
           </details>
 
           <div style="max-width:320px;margin:0 auto;">
-            <button type="button" class="bip-box center" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">${scannerBipAtivo ? 'Desativar Câmera' : 'Ativar Câmera'}</button>
+            <button type="button" class="bip-brown center" id="btnToggleScannerBip" onclick="alternarScannerBipagem()">${scannerBipAtivo ? 'Desativar Câmera' : 'Ativar Câmera'}</button>
           </div>
 
           <div id="cameraReader" style="margin:18px auto 0;"></div>
@@ -2198,6 +2200,28 @@ ${baseConfig.cuidados}
             <div class="modal-body" style="max-height:60vh;overflow:auto;">${corpo}</div>
           </div>
         </div>`;
+    }
+
+    // Tipo de operação: botão que abre a janela com as opções
+    function abrirSeletorTipoBip() {
+      const tipos = window.currentUserRole === 'vendedor' ? ['venda'] : Object.keys(TIPO_BIP_LABELS);
+      const itens = tipos.map(k =>
+        `<button type="button" class="bip-box" style="margin-bottom:8px;" onclick="escolherTipoBip('${k}')"><span>${esc(TIPO_BIP_LABELS[k])}</span>${k === BIPAGEM_TIPO ? '<span class="badge badge-muted">Selecionado</span>' : ''}</button>`
+      ).join('');
+      document.getElementById('modalRoot').innerHTML = `
+        <div class="modal-backdrop" onclick="fecharModal(event)">
+          <div class="modal" style="max-width:440px;">
+            <div class="modal-head"><h3>Tipo de operação</h3><button class="modal-close" onclick="fecharModalDirect()">×</button></div>
+            <div class="modal-body">${itens}</div>
+          </div>
+        </div>`;
+    }
+
+    function escolherTipoBip(tipo) {
+      BIPAGEM_TIPO = tipo;
+      const el = document.getElementById('bipTipoTexto');
+      if (el) el.textContent = TIPO_BIP_LABELS[tipo] || tipo;
+      fecharModalDirect();
     }
 
     function escolherEtiquetaBip(codigo) {
@@ -2421,6 +2445,7 @@ ${baseConfig.cuidados}
           vendedorUid: window.currentFirebaseUser?.uid || '',
           vendedorEmail: window.currentFirebaseUser?.email || '',
           comissaoPorcentagem: comissaoAplicavel(),
+          baixaPendente: window.currentUserRole === 'vendedor',
           statusAcerto: 'pendente'
         };
         DB.vendas.push(vendaBipagem);
@@ -2779,6 +2804,8 @@ ${baseConfig.cuidados}
     window.viewProducao = viewProducao;
     window.viewBipagem = viewBipagem;
     window.abrirSeletorBip = abrirSeletorBip;
+    window.abrirSeletorTipoBip = abrirSeletorTipoBip;
+    window.escolherTipoBip = escolherTipoBip;
     window.escolherEtiquetaBip = escolherEtiquetaBip;
     window.abrirAjusteEtiquetas = abrirAjusteEtiquetas;
     window.contarAjusteEtiquetas = contarAjusteEtiquetas;
@@ -2800,7 +2827,7 @@ ${baseConfig.cuidados}
   const ROLES = Object.freeze({ ADMIN:'admin', VENDEDOR:'vendedor', VISUALIZADOR:'visualizador' });
   const ROLE_LABELS = { admin:'Administrador', vendedor:'Vendedor', visualizador:'Visualizador' };
   const ROLE_ROUTES = {
-    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','usuarios','config'],
+    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','config'],
     vendedor: ['produtos','vendas','bipagem','comissoes'],
     visualizador: ['dashboard','estoque','produtos','producao','bipagem','etiquetas','relatorios']
   };
@@ -2903,10 +2930,85 @@ ${baseConfig.cuidados}
     }
   }
 
+  // ---------- Etiquetas para vendedores ----------
+  // O admin publica a lista de etiquetas disponíveis (documento leve). O vendedor usa essa lista para
+  // vender/bipar, e cada venda dele vem marcada com baixaPendente; o admin concilia o estoque ao abrir o app.
+  async function publicarEtiquetasVendedor(){
+    if(!isAdmin() || !window.setDoc) return;
+    const lista=[];
+    (DB.producoes||[]).forEach(pr=>(pr.itens||[]).forEach(it=>{
+      if(!it.status||it.status==='disponivel') lista.push({c:it.codigo,p:pr.produtoId,l:pr.lote||'',v:pr.dataValidade||''});
+    }));
+    // catálogo sem receita/custos: só o que o vendedor precisa para vender
+    const produtos=(DB.produtos||[]).map(p=>({id:p.id,nome:p.nome,sku:p.sku,categoria:p.categoria,preco:p.preco,estoque:p.estoque,estoqueMin:p.estoqueMin,pesoMedio:p.pesoMedio,validadeDias:p.validadeDias}));
+    try{
+      await window.setDoc(window.doc(window.db,'catalogo_vendedor','etiquetas'),{dados:lista,atualizadoEm:window.serverTimestamp()});
+      await window.setDoc(window.doc(window.db,'catalogo_vendedor','produtos'),{dados:produtos,atualizadoEm:window.serverTimestamp()});
+    }catch(e){ console.warn('Não foi possível publicar o catálogo para vendedores (verifique as regras do Firestore):',e); }
+  }
+  async function carregarCatalogoVendedor(){
+    try{
+      const [e,p]=await Promise.all([
+        window.getDoc(window.doc(window.db,'catalogo_vendedor','etiquetas')),
+        window.getDoc(window.doc(window.db,'catalogo_vendedor','produtos'))
+      ]);
+      return { etiquetas: e.exists()?(e.data().dados||[]):null, produtos: p.exists()?(p.data().dados||[]):null };
+    }catch(err){
+      console.warn('Catálogo do vendedor indisponível (verifique as regras do Firestore):',err);
+      return { etiquetas:null, produtos:null };
+    }
+  }
+  function montarProducoesVendedor(lista, vendas){
+    const usados=new Set();
+    (vendas||[]).forEach(v=>{
+      if(v.codigo) usados.add(String(v.codigo).toUpperCase());
+      (v.etiquetasBaixadas||[]).forEach(c=>usados.add(String(c).toUpperCase()));
+    });
+    const grupos={};
+    (lista||[]).forEach(e=>{
+      const k=e.p+'|'+e.l+'|'+e.v;
+      const g=grupos[k]||(grupos[k]={id:'pub-'+k,produtoId:e.p,lote:e.l,dataValidade:e.v,quantidade:0,itens:[]});
+      g.itens.push({codigo:e.c,status:usados.has(String(e.c).toUpperCase())?'vendido':'disponivel'});
+      g.quantidade++;
+    });
+    return Object.values(grupos);
+  }
+  async function conciliarBaixasVendedores(){
+    if(!isAdmin()) return;
+    const pend=(DB.vendas||[]).filter(v=>v.baixaPendente===true);
+    if(!pend.length) return;
+    let conflitos=0;
+    pend.forEach(v=>{
+      const it0=(v.itens||[])[0]||{}; const qty=Number(it0.qty)||1; const prod=findProduto(it0.produtoId);
+      const codes=(v.origem==='bipagem'&&v.codigo)?[v.codigo]:(v.etiquetasBaixadas||[]);
+      const aplicados=[], conf=[];
+      codes.forEach(c=>{
+        const a=findItemByCode(c);
+        if(a&&a.item){ if(!a.item.status||a.item.status==='disponivel'){ a.item.status='vendido'; aplicados.push(c); } else conf.push(c); }
+      });
+      if(v.origem!=='bipagem' && aplicados.length+conf.length<qty){
+        const extra=baixarEtiquetasDoProduto(it0.produtoId, qty-aplicados.length-conf.length);
+        v.etiquetasBaixadas=[...(v.etiquetasBaixadas||[]),...extra];
+      }
+      if(prod) prod.estoque=Math.max(0,prod.estoque-qty);
+      if(conf.length){ v.conflitoEtiquetas=conf; conflitos++; }
+      v.baixaPendente=false;
+    });
+    persist('produtos','producoes','vendas');
+    await Promise.all(pend.map(v=>salvarVendaFirestore(v)));
+    toast(pend.length+' venda(s) de vendedores conciliada(s) no estoque'+(conflitos?' ('+conflitos+' com etiqueta já usada)':'')+'.', conflitos?'err':'ok');
+  }
+  window.publicarEtiquetasVendedor = publicarEtiquetasVendedor;
+
   const loadAllOriginal = window.loadAll;
   window.loadAll = async function(){
     if (loadAllOriginal) await loadAllOriginal();
     DB.vendas = await carregarVendasRBAC();
+    if (isSeller()) {
+      const cat = await carregarCatalogoVendedor();
+      if (Array.isArray(cat.produtos) && cat.produtos.length) DB.produtos = cat.produtos;
+      if (Array.isArray(cat.etiquetas)) DB.producoes = montarProducoesVendedor(cat.etiquetas, DB.vendas);
+    }
     if (window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
   };
 
@@ -2922,7 +3024,6 @@ ${baseConfig.cuidados}
     {id:'etiquetas',label:'Etiquetas',icon:window.iconTicket || (()=>'')},
     {id:'relatorios',label:'Relatórios',icon:window.iconChart || (()=>'')},
     {id:'comissoes',label:'Comissões / Acertos',icon:window.iconCash || (()=>'')},
-    {id:'usuarios',label:'Gerenciamento de Usuários',icon:window.iconGear || (()=>'')},
     {id:'config',label:'Configurações',icon:window.iconGear || (()=>'')}
   ];
   function allowedNav(){ return ALL_NAV.filter(i=>can(i.id)); }
@@ -2966,7 +3067,7 @@ ${baseConfig.cuidados}
     produtos:['Produtos','Consulta de produtos e preços'], producao:['Produção','Lotes produzidos e etiquetas'], vendas:['Vendas','Registre vendas manuais'],
     caixa:['Fluxo de Caixa','Entradas, saídas e saldo do negócio'], bipagem:['Bipagem','Saída rápida de itens por QR Code'], etiquetas:['Etiquetas','Gere e reimprima etiquetas'],
     relatorios:['Relatórios','Indicadores e desempenho'], comissoes:['Comissões / Acertos','Transparência de ganhos e prestações de contas'],
-    usuarios:['Gerenciamento de Usuários','Funções e comissões dos usuários'], config:['Configurações','Dados da empresa']
+    config:['Configurações','Dados da empresa, usuários e comissões']
   };
 
   // ---------- Produto somente leitura para vendedor/visualizador ----------
@@ -3047,7 +3148,7 @@ ${baseConfig.cuidados}
   window.viewUsuarios = async function(){
     const users=await carregarUsuarios();
     const rows=users.map(u=>`<tr><td><b>${esc(u.email||'Sem e-mail')}</b><br><small class="mono">${esc(u.uid)}</small></td><td><select id="usrRole_${esc(u.uid)}" class="input" style="min-width:150px">${['admin','vendedor','visualizador'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td><td><input id="usrComissao_${esc(u.uid)}" class="input" type="number" min="0" max="100" step="0.1" value="${Number(u.comissaoPorcentagem??20)}" style="max-width:120px"></td><td>${roleBadge(u.role||'vendedor')}</td><td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="salvarPerfilUsuario('${esc(u.uid)}')">Salvar</button></td></tr>`).join('');
-    return `<div class="card card-pad"><div class="help-note"><b>RBAC:</b> usuários autenticados sem documento em <span class="mono">usuarios/{uid}</span> entram automaticamente como vendedor, sem acesso aos dados administrativos.</div><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Função</th><th>Comissão %</th><th>Status</th><th style="text-align:right">Ação</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Nenhum perfil cadastrado.</td></tr>'}</tbody></table></div></div>`;
+    return `<div class="card card-pad" style="margin-top:20px"><h3>Usuários e Comissões</h3><div class="divider"></div><div class="help-note"><b>RBAC:</b> usuários autenticados sem documento em <span class="mono">usuarios/{uid}</span> entram automaticamente como vendedor, sem acesso aos dados administrativos.</div><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Função</th><th>Comissão %</th><th>Status</th><th style="text-align:right">Ação</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">Nenhum perfil cadastrado.</td></tr>'}</tbody></table></div></div>`;
   };
 
   // ---------- Comissões / Acertos ----------
@@ -3257,8 +3358,7 @@ ${baseConfig.cuidados}
     else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
     else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
     else if(ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
-    else if(ROUTE==='usuarios') c.innerHTML=await window.viewUsuarios();
-    else if(ROUTE==='config') c.innerHTML=window.viewConfig();
+    else if(ROUTE==='config') c.innerHTML=window.viewConfig() + (isAdmin() ? await window.viewUsuarios() : '');
   };
 
   ['salvarInsumo','deletarInsumo','salvarProducao','deletarProducao','salvarConfig','salvarCaixa','deletarCaixa'].forEach(fn=>{
@@ -3279,7 +3379,7 @@ ${baseConfig.cuidados}
 
   const persistOriginal = window.persist;
   window.persist = function(...keys){
-    if(!isSeller()){ return persistOriginal(...keys); }
+    if(!isSeller()){ const r=persistOriginal(...keys); if(isAdmin() && (keys.includes('producoes') || keys.includes('produtos'))) publicarEtiquetasVendedor(); return r; }
     keys.forEach(k=>{
       if(k==='vendas') (DB.vendas||[]).filter(v=>v.vendedorUid===window.currentFirebaseUser?.uid).forEach(v=>salvarVendaFirestore(v));
       else localStorage.setItem('docemg_'+k, JSON.stringify(DB[k]));
@@ -3304,6 +3404,8 @@ ${baseConfig.cuidados}
 
     if (isAdmin()) {
       try { await carregarUsuarios(); } catch {}
+      try { await conciliarBaixasVendedores(); } catch (e) { console.error('Conciliação de vendas de vendedores falhou:', e); }
+      publicarEtiquetasVendedor();
     }
 
     if (typeof window.render === 'function') await window.render();
