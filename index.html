@@ -2204,7 +2204,7 @@ ${baseConfig.cuidados}
 
     // Tipo de operação: botão que abre a janela com as opções
     function abrirSeletorTipoBip() {
-      const tipos = window.currentUserRole === 'vendedor' ? ['venda'] : Object.keys(TIPO_BIP_LABELS);
+      const tipos = Object.keys(TIPO_BIP_LABELS);
       const itens = tipos.map(k =>
         `<button type="button" class="bip-box" style="margin-bottom:8px;" onclick="escolherTipoBip('${k}')"><span>${esc(TIPO_BIP_LABELS[k])}</span>${k === BIPAGEM_TIPO ? '<span class="badge badge-muted">Selecionado</span>' : ''}</button>`
       ).join('');
