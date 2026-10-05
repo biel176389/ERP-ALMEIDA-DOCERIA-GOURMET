@@ -958,8 +958,43 @@ ${baseConfig.cuidados}
 
     function vendaDia(v) { return (v.data || '').slice(0, 10); }
 
-    let DASH_PERIOD = 14;
-    function setDashPeriod(n) { DASH_PERIOD = n; render(); }
+    // ---------- Filtro de período compartilhado (Dashboard e Caixa) ----------
+    const FILTROS_PERIODO = [['hoje','Hoje'],['7','7 dias'],['30','1 Mês'],['custom','Personalizado']];
+    const PERIODO = { dash: { f: '7', de: '', ate: '' }, caixa: { f: '30', de: '', ate: '' } };
+    const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    function periodDaysFiltro(st, minData) {
+      const hoje = todayISO(); let ini = hoje, fim = hoje; const f = st.f;
+      if (f === 'hoje') {}
+      else if (/^\d+$/.test(f)) ini = addDays(hoje, -(parseInt(f, 10) - 1));
+      else if (f === 'mes') ini = hoje.slice(0, 8) + '01';
+      else if (f === 'mes_anterior') { const y = +hoje.slice(0, 4), m = +hoje.slice(5, 7); ini = isoLocal(new Date(y, m - 2, 1)); fim = isoLocal(new Date(y, m - 1, 0)); }
+      else if (f === 'tudo') ini = (minData && minData < hoje) ? minData : hoje;
+      else if (f === 'custom') { ini = st.de || hoje.slice(0, 8) + '01'; fim = st.ate || hoje; if (ini > fim) { const t = ini; ini = fim; fim = t; } }
+      const MAX = 731; // limite de segurança: ~2 anos de pontos nos gráficos
+      const total = Math.round((new Date(fim + 'T00:00:00') - new Date(ini + 'T00:00:00')) / 86400000) + 1;
+      if (total > MAX) ini = addDays(fim, -(MAX - 1));
+      const out = []; let d = ini;
+      while (d <= fim && out.length < MAX) { out.push(d); d = addDays(d, 1); }
+      return out;
+    }
+    function periodoLabel(st, days) {
+      if (st.f === 'hoje') return 'hoje';
+      if (/^\d+$/.test(st.f)) return 'últimos ' + st.f + ' dias';
+      return days.length ? fmtDate(days[0]) + ' a ' + fmtDate(days[days.length - 1]) : '';
+    }
+    function minDataVendas() { return (DB.vendas || []).reduce((m, v) => { const d = vendaDia(v); return d && (!m || d < m) ? d : m; }, ''); }
+    function filtroPeriodoHtml(key) {
+      const st = PERIODO[key];
+      const btns = FILTROS_PERIODO.map(([id, rot]) => `<button class="pill-tab ${st.f === id ? 'active' : ''}" onclick="setPeriodoFiltro('${key}','${id}')">${rot}</button>`).join('');
+      const custom = st.f === 'custom' ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;justify-content:flex-end"><label style="font-size:13px">De <input type="date" class="input" style="width:auto;display:inline-block" value="${st.de || ''}" onchange="setPeriodoData('${key}','de',this.value)"></label><label style="font-size:13px">Até <input type="date" class="input" style="width:auto;display:inline-block" value="${st.ate || ''}" onchange="setPeriodoData('${key}','ate',this.value)"></label></div>` : '';
+      return `<div style="max-width:100%"><div class="pill-tabs" style="margin-left:auto">${btns}</div>${custom}</div>`;
+    }
+    window.setPeriodoFiltro = function (key, f) {
+      const st = PERIODO[key]; st.f = f;
+      if (f === 'custom' && !st.de && !st.ate) { const h = todayISO(); st.de = h.slice(0, 8) + '01'; st.ate = h; }
+      render();
+    };
+    window.setPeriodoData = function (key, campo, v) { PERIODO[key][campo] = v; render(); };
 
     function viewDashboard() {
       const hoje = todayISO();
@@ -974,8 +1009,8 @@ ${baseConfig.cuidados}
       const lowInsumos = DB.insumos.filter(insumoLowStock).length;
       const lowProdutos = DB.produtos.filter(produtoLowStock).length;
 
-      const periodos = [7, 14, 30, 90];
-      const days = periodDays(DASH_PERIOD);
+      const days = periodDaysFiltro(PERIODO.dash, minDataVendas());
+      const lblPer = periodoLabel(PERIODO.dash, days);
       const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
       const vendasPorDia = days.map(d => DB.vendas.filter(v => vendaDia(v) === d));
       const dayTotals = vendasPorDia.map(lista => lista.reduce((s, v) => s + vendasFaturamento(v), 0));
@@ -1007,10 +1042,8 @@ ${baseConfig.cuidados}
       <div class="grid grid-2" style="margin-top:16px;">
         <div class="card card-pad">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-            <h3 style="font-size:15px;margin:0;">Faturamento — últimos ${DASH_PERIOD} dias</h3>
-            <div class="pill-tabs">
-              ${periodos.map(p => `<button class="pill-tab ${p === DASH_PERIOD ? 'active' : ''}" onclick="setDashPeriod(${p})">${p}d</button>`).join('')}
-            </div>
+            <h3 style="font-size:15px;margin:0;">Faturamento — ${lblPer}</h3>
+            ${filtroPeriodoHtml('dash')}
           </div>
           <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas para ver o faturamento aqui.')}</div>
         </div>
@@ -1022,22 +1055,22 @@ ${baseConfig.cuidados}
 
       <div class="grid grid-2" style="margin-top:16px;">
         <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento x Custo x Lucro (${DASH_PERIOD} dias)</h3>
+          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento x Custo x Lucro (${lblPer})</h3>
           <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para comparar faturamento, custo e lucro.')}</div>
         </div>
         <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Margem de lucro % (${DASH_PERIOD} dias)</h3>
+          <h3 style="font-size:15px;margin-bottom:12px;">Margem de lucro % (${lblPer})</h3>
           <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular a margem.')}</div>
         </div>
       </div>
 
       <div class="grid grid-2" style="margin-top:16px;">
         <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Ticket médio (${DASH_PERIOD} dias)</h3>
+          <h3 style="font-size:15px;margin-bottom:12px;">Ticket médio (${lblPer})</h3>
           <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular o ticket médio.')}</div>
         </div>
         <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Vendas por origem (${DASH_PERIOD} dias)</h3>
+          <h3 style="font-size:15px;margin-bottom:12px;">Vendas por origem (${lblPer})</h3>
           <div class="chart-wrap sm">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas manuais ou por bipagem.')}</div>
         </div>
       </div>
@@ -1908,16 +1941,15 @@ ${baseConfig.cuidados}
       return lista;
     }
 
-    let CAIXA_PERIOD = 30;
-    function setCaixaPeriod(n) { CAIXA_PERIOD = n; render(); }
-
     function viewCaixa() {
-      const periodos = [7, 14, 30, 90];
       const extrato = extratoCaixa();
       const saldoTotal = extrato.length ? extrato[extrato.length - 1].saldoAcumulado : 0;
 
-      const days = periodDays(CAIXA_PERIOD);
+      const minCx = extrato.reduce((m, l) => (l.data && (!m || l.data < m)) ? l.data : m, '');
+      const days = periodDaysFiltro(PERIODO.caixa, minCx);
+      const lblPer = periodoLabel(PERIODO.caixa, days);
       const startPeriodo = days[0];
+      const endPeriodo = days[days.length - 1];
       const saldoInicial = extrato.filter(l => l.data < startPeriodo).reduce((s, l) => s + (l.tipo === 'entrada' ? l.valor : -l.valor), 0);
 
       const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
@@ -1934,7 +1966,7 @@ ${baseConfig.cuidados}
 
       window.__caixa = { dayLabels, dayEntradas, daySaidas, daySaldoAcumulado };
 
-      const linhasExtrato = extrato.filter(l => l.data >= startPeriodo).slice().reverse();
+      const linhasExtrato = extrato.filter(l => l.data >= startPeriodo && l.data <= endPeriodo).slice().reverse();
       const rows = linhasExtrato.map(l => `
         <tr>
           <td><span class="mono">${fmtDate(l.data)}</span></td>
@@ -1954,28 +1986,26 @@ ${baseConfig.cuidados}
       return `
       <div class="grid grid-4">
         <div class="card stat"><div class="label">Saldo atual</div><div class="value">${fmtMoney(saldoTotal)}</div><div class="delta">acumulado de todo o histórico</div></div>
-        <div class="card stat"><div class="label">Entradas (período)</div><div class="value">${fmtMoney(entradasPeriodo)}</div><div class="delta">últimos ${CAIXA_PERIOD} dias</div></div>
-        <div class="card stat"><div class="label">Saídas (período)</div><div class="value">${fmtMoney(saidasPeriodo)}</div><div class="delta">últimos ${CAIXA_PERIOD} dias</div></div>
+        <div class="card stat"><div class="label">Entradas (período)</div><div class="value">${fmtMoney(entradasPeriodo)}</div><div class="delta">${lblPer}</div></div>
+        <div class="card stat"><div class="label">Saídas (período)</div><div class="value">${fmtMoney(saidasPeriodo)}</div><div class="delta">${lblPer}</div></div>
         <div class="card stat"><div class="label">Saldo do período</div><div class="value">${fmtMoney(saldoPeriodo)}</div><div class="delta ${saldoPeriodo < 0 ? 'down' : ''}">${saldoPeriodo >= 0 ? 'positivo' : 'negativo'}</div></div>
       </div>
 
       <div class="card card-pad" style="margin-top:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-          <h3 style="font-size:15px;margin:0;">Saldo acumulado — últimos ${CAIXA_PERIOD} dias</h3>
-          <div class="pill-tabs">
-            ${periodos.map(p => `<button class="pill-tab ${p === CAIXA_PERIOD ? 'active' : ''}" onclick="setCaixaPeriod(${p})">${p}d</button>`).join('')}
-          </div>
+          <h3 style="font-size:15px;margin:0;">Saldo acumulado — ${lblPer}</h3>
+          ${filtroPeriodoHtml('caixa')}
         </div>
         <div class="chart-wrap"><canvas id="chartCaixaSaldo"></canvas></div>
       </div>
 
       <div class="card card-pad" style="margin-top:16px;">
-        <h3 style="font-size:15px;margin-bottom:12px;">Entradas x Saídas — últimos ${CAIXA_PERIOD} dias</h3>
+        <h3 style="font-size:15px;margin-bottom:12px;">Entradas x Saídas — ${lblPer}</h3>
         <div class="chart-wrap">${temMovimentoPeriodo ? '<canvas id="chartCaixaFluxo"></canvas>' : emptyBlock('Sem movimentações no período', 'Registre vendas ou lançamentos para ver o gráfico.')}</div>
       </div>
 
       <div class="card card-pad" style="margin-top:16px;">
-        <h3 style="font-size:15px;margin-bottom:12px;">Extrato (${CAIXA_PERIOD} dias)</h3>
+        <h3 style="font-size:15px;margin-bottom:12px;">Extrato (${lblPer})</h3>
         <div class="table-wrap">
           <table>
             <thead>
@@ -2836,7 +2866,7 @@ ${baseConfig.cuidados}
   window.currentFirebaseUser = window.currentFirebaseUser || null;
   window.currentUserProfile = window.currentUserProfile || null;
   window.__usersCache = [];
-  window.__comissaoFiltro = 'mes';
+  window.__comissaoFiltro = '30dias';
   window.__comissaoVendedor = 'todos';
   window.__comissaoSel = {};
 
@@ -3152,14 +3182,44 @@ ${baseConfig.cuidados}
   };
 
   // ---------- Comissões / Acertos ----------
+  window.__comissaoDe=''; window.__comissaoAte='';
+  const FILTROS_COMISSAO=[['hoje','Hoje'],['7dias','7 dias'],['30dias','1 Mês'],['custom','Personalizado']];
+  function ymdComissao(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function periodoComissao(){
     const hoje=new Date(); hoje.setHours(0,0,0,0);
-    const inicio=new Date(hoje);
-    if(window.__comissaoFiltro==='hoje'){}
-    else if(window.__comissaoFiltro==='7dias') inicio.setDate(inicio.getDate()-6);
+    let inicio=new Date(hoje), fim=new Date(hoje);
+    const f=window.__comissaoFiltro;
+    if(f==='hoje'){}
+    else if(/^\d+dias$/.test(f)) inicio.setDate(inicio.getDate()-(parseInt(f,10)-1));
+    else if(f==='mes_anterior'){ inicio=new Date(hoje.getFullYear(),hoje.getMonth()-1,1); fim=new Date(hoje.getFullYear(),hoje.getMonth(),0); }
+    else if(f==='tudo') inicio=new Date(2000,0,1);
+    else if(f==='custom'){
+      inicio=window.__comissaoDe?new Date(window.__comissaoDe+'T00:00:00'):new Date(hoje.getFullYear(),hoje.getMonth(),1);
+      fim=window.__comissaoAte?new Date(window.__comissaoAte+'T00:00:00'):new Date(hoje);
+      if(isNaN(inicio)) inicio=new Date(hoje.getFullYear(),hoje.getMonth(),1);
+      if(isNaN(fim)) fim=new Date(hoje);
+      if(inicio>fim){ const t=inicio; inicio=fim; fim=t; }
+    }
     else inicio.setDate(1);
-    const fim=new Date(hoje); fim.setHours(23,59,59,999);
+    inicio.setHours(0,0,0,0); fim.setHours(23,59,59,999);
     return {inicio,fim};
+  }
+  window.setComissaoFiltro=function(f){
+    window.__comissaoFiltro=f; window.__comissaoSel={};
+    if(f==='custom' && !window.__comissaoDe && !window.__comissaoAte){
+      const h=new Date(); window.__comissaoDe=ymdComissao(new Date(h.getFullYear(),h.getMonth(),1)); window.__comissaoAte=ymdComissao(h);
+    }
+    render();
+  };
+  window.setComissaoData=function(campo,valor){
+    if(campo==='de') window.__comissaoDe=valor; else window.__comissaoAte=valor;
+    window.__comissaoSel={}; render();
+  };
+  function filtroComissaoHtml(){
+    const f=window.__comissaoFiltro;
+    const btns=FILTROS_COMISSAO.map(([id,rot])=>`<button class="pill-tab ${f===id?'active':''}" onclick="setComissaoFiltro('${id}')">${rot}</button>`).join('');
+    const custom=f==='custom'?`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="font-size:13px">De <input type="date" class="input" style="width:auto;display:inline-block" value="${window.__comissaoDe||''}" onchange="setComissaoData('de',this.value)"></label><label style="font-size:13px">Até <input type="date" class="input" style="width:auto;display:inline-block" value="${window.__comissaoAte||''}" onchange="setComissaoData('ate',this.value)"></label></div>`:'';
+    return `<div style="margin-bottom:16px"><div class="pill-tabs" style="flex-wrap:wrap;gap:6px">${btns}</div>${custom}</div>`;
   }
   function vendasComissao(){
     const {inicio,fim}=periodoComissao();
@@ -3334,7 +3394,7 @@ ${baseConfig.cuidados}
     const lista=vendasComissao(); const r=comissaoResumo(lista); const demo=isAdmin()?demonstrativoComissao(lista):''; const selN=vendasSelecionadasComissao().length; const pendN=lista.filter(v=>v.statusAcerto!=='quitado').length;
     const seletor=isAdmin()?`<div class="field"><label>Vendedor</label><select class="input" onchange="window.__comissaoVendedor=this.value; window.__comissaoSel={}; render()"><option value="todos" ${window.__comissaoVendedor==='todos'?'selected':''}>Todos os vendedores</option>${vendedores.map(u=>`<option value="${esc(u.uid)}" ${window.__comissaoVendedor===u.uid?'selected':''}>${esc(u.email||u.uid)} · ${Number(u.comissaoPorcentagem??20)}%</option>`).join('')}</select></div>`:`<div class="help-note"><b>Comissão atual:</b> ${Number(window.currentUserComissao)}% · este painel mostra somente suas próprias vendas.</div>`;
     const rows=lista.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{const t=saleTotal(v),c=saleCommission(v),rp=saleRepasse(v),item=v.itens?.[0]||{}; const p=findProduto(item.produtoId); return `<tr>${isAdmin()?`<td style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" class="chk-comissao" data-id="${esc(v.id)}" ${v.statusAcerto==='quitado'?'disabled':''} ${window.__comissaoSel[v.id]&&v.statusAcerto!=='quitado'?'checked':''} onchange="toggleSelComissao('${esc(v.id)}',this.checked)"></label></td>`:''}<td class="mono">${fmtDateTime(v.data)}</td><td>${esc(p?.nome||item.produtoId||'—')}</td><td>${item.qty||0}</td><td>${esc(v.localCanal||'—')}</td>${isAdmin()?`<td>${esc(v.vendedorEmail||'—')}</td>`:''}<td>${fmtMoney(t)}${isAdmin()?`<br><small class="mono" style="opacity:.65">custo ${fmtMoney(saleCost(v))}</small>`:''}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(c)}</td><td>${fmtMoney(rp)}</td><td>${v.statusAcerto==='quitado'?'<span class="badge badge-ok">Quitado</span>':'<span class="badge badge-warn">Pendente</span>'}</td>${isAdmin()?`<td style="text-align:right;white-space:nowrap">${v.statusAcerto==='quitado'?`<button class="btn btn-secondary btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',false)">Desfazer</button>`:`<button class="btn btn-gold btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',true)">✓ Quitar</button>`}</td>`:''}</tr>`}).join('');
-    return `${seletor}<div class="pill-tabs" style="margin-bottom:16px"><button class="pill-tab ${window.__comissaoFiltro==='hoje'?'active':''}" onclick="window.__comissaoFiltro='hoje';window.__comissaoSel={};render()">Hoje</button><button class="pill-tab ${window.__comissaoFiltro==='7dias'?'active':''}" onclick="window.__comissaoFiltro='7dias';window.__comissaoSel={};render()">7 dias</button><button class="pill-tab ${window.__comissaoFiltro==='mes'?'active':''}" onclick="window.__comissaoFiltro='mes';window.__comissaoSel={};render()">Mês Atual</button></div>
+    return `${seletor}${filtroComissaoHtml()}
       ${demo}
       <div class="grid grid-3"><div class="card stat"><div class="label">Total Vendido</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">Pendente de acerto</div></div><div class="card stat"><div class="label">Comissão do Vendedor</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Ganhos no período</div></div><div class="card stat"><div class="label">Valor a Repassar</div><div class="value">${fmtMoney(r.repasse)}</div><div class="delta">Prestação de contas pendente</div></div></div>
       ${isAdmin()?`<div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin:16px 0"><button id="btnTransfSel" class="btn btn-secondary" onclick="abrirTransferenciaVendas()">⇄ Transferir selecionadas (${selN})</button><button class="btn btn-gold" onclick="marcarAcertoRealizado()">✓ Marcar Acerto Realizado / Quitar Prestação</button></div>`:''}
