@@ -72,8 +72,30 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     window.currentFirebaseUser = user;
     try {
-      const userSnap = await getDoc(doc(db, 'usuarios', user.uid));
-      const userData = userSnap.exists() ? userSnap.data() : {};
+      const userRef = doc(db, 'usuarios', user.uid);
+      const userSnap = await getDoc(userRef);
+      let userData = userSnap.exists() ? userSnap.data() : {};
+
+      // Registro automático do perfil em usuarios/{uid} no primeiro acesso
+      // (e preenchimento do e-mail em perfis antigos que não o têm).
+      // Sempre nasce como 'visualizador': só o admin promove depois.
+      try {
+        if (!userSnap.exists()) {
+          const perfilNovo = {
+            email: user.email || '',
+            role: 'visualizador',
+            comissaoPorcentagem: 20,
+            criadoEm: serverTimestamp()
+          };
+          await setDoc(userRef, perfilNovo);
+          userData = perfilNovo;
+        } else if (!userData.email && user.email) {
+          await setDoc(userRef, { email: user.email }, { merge: true });
+          userData = { ...userData, email: user.email };
+        }
+      } catch (perfilError) {
+        console.error('Falha ao registrar perfil em usuarios/' + user.uid + ':', perfilError);
+      }
       const allowedRoles = ['admin', 'vendedor', 'visualizador'];
       // Normaliza (trim + minúsculas) para não cair no fallback por causa de
       // "Admin", "ADMIN " ou espaços digitados à mão no Firestore Console.
@@ -501,8 +523,8 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       <div class="brand-sub">Acesso ao Sistema ERP</div>
       
       <div class="login-tabs">
-        <button class="login-tab active" id="tabEntrar" onclick="alternarAbaLogin('entrar')">Entrar</button>
-        <button class="login-tab" id="tabCadastrar" style="display:none" aria-hidden="true">Criar Conta</button>
+        <button type="button" class="login-tab active" id="tabEntrar" onclick="alternarAbaLogin('entrar')">Entrar</button>
+        <button type="button" class="login-tab" id="tabCadastrar" onclick="alternarAbaLogin('cadastrar')">Criar Conta</button>
       </div>
 
       <form id="authForm" onsubmit="submeterAuth(event)">
@@ -595,11 +617,32 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       e.preventDefault();
       const email = document.getElementById('authEmail').value;
       const senha = document.getElementById('authSenha').value;
+      const msgErroAuth = (err) => ({
+        'auth/email-already-in-use': 'Este e-mail já tem conta. Use a aba Entrar.',
+        'auth/invalid-email': 'E-mail inválido.',
+        'auth/weak-password': 'Senha fraca: use pelo menos 6 caracteres.',
+        'auth/user-disabled': 'Esta conta foi bloqueada. Fale com o administrador.',
+        'auth/invalid-credential': 'E-mail ou senha incorretos.',
+        'auth/wrong-password': 'E-mail ou senha incorretos.',
+        'auth/user-not-found': 'E-mail ou senha incorretos.',
+        'auth/too-many-requests': 'Muitas tentativas. Aguarde um pouco e tente de novo.',
+        'auth/network-request-failed': 'Sem conexão com a internet.',
+        'auth/operation-not-allowed': 'Cadastro por e-mail desativado no Firebase (Authentication → Sign-in method).'
+      }[err.code] || (err.code || err.message));
+      const btn = document.getElementById('btnAuthSubmit');
+      if (btn) btn.disabled = true;
       try {
-        await window.fazerLogin(email, senha);
-        toast('Login realizado com sucesso!', 'ok');
+        if (modoAuth === 'cadastrar') {
+          await window.fazerCadastro(email.trim(), senha);
+          toast('Conta criada com sucesso!', 'ok');
+        } else {
+          await window.fazerLogin(email.trim(), senha);
+          toast('Login realizado com sucesso!', 'ok');
+        }
       } catch (err) {
-        toast('Não foi possível entrar: ' + (err.code || err.message), 'err');
+        toast((modoAuth === 'cadastrar' ? 'Não foi possível criar a conta: ' : 'Não foi possível entrar: ') + msgErroAuth(err), 'err');
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 
