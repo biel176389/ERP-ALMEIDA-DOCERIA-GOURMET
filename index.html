@@ -2748,8 +2748,12 @@ ${baseConfig.cuidados}
                   <div class="field"><label>Fundo</label><input id="edEtqFundo" type="color" class="input" value="${esc(l.fundo || '#ffffff')}" oninput="atualizarEditorEtiqueta()"></div>
                   <div class="field"><label>Cor do texto</label><input id="edEtqTexto" type="color" class="input" value="${esc(l.corTexto || '#171717')}" oninput="atualizarEditorEtiqueta()"></div>
                   <div class="field"><label>Cor da borda</label><input id="edEtqBorda" type="color" class="input" value="${esc(l.corBorda || '#171717')}" oninput="atualizarEditorEtiqueta()"></div>
-                  <div class="field"><label>Cor de destaque</label><input id="edEtqDestaque" type="color" class="input" value="${esc(l.corDestaque || '#7a1f3d')}" oninput="atualizarEditorEtiqueta()"></div>
-                  <div class="field full"><label>Fonte do título</label><select id="edEtqFonteTitulo" class="input" onchange="atualizarEditorEtiqueta()">${opts([['Fraunces','Elegante (Fraunces)'],['Manrope','Moderna (Manrope)'],['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana']],l.fonteTitulo || 'Fraunces')}</select></div>
+                  <div class="field"><label>Cor de destaque</label><input id="edEtqDestaque" type="color" class="input" value="${esc(l.corDestaque || '#7a1f3d')}" oninput="alterarTamanhoFonteEtiqueta(this.value)"></div>
+                  <div class="field full"><label>Família da fonte do elemento selecionado</label><select id="edEtqFonteFamilia" class="input" onchange="atualizarEditorEtiqueta();atualizarFamiliaFonteEtiqueta()">${opts([['Fraunces','Elegante (Fraunces)'],['Manrope','Moderna (Manrope)'],['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana']],(l.fontesFamilia||{})[(document.getElementById('edEtqFonteElemento')||{}).value||'titulo'] || 'Fraunces')}</select><p class="hint">Escolha o elemento abaixo e defina a fonte dele, sem alterar os demais.</p></div>
+                  <div class="field"><label>Largura da etiqueta (cm)</label><input id="edEtqLarguraCm" type="number" min="2" max="30" step="0.1" class="input" value="${Number(l.larguraCm)||9}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Altura da etiqueta (cm)</label><input id="edEtqAlturaCm" type="number" min="1" max="20" step="0.1" class="input" value="${Number(l.alturaCm)||4}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field full"><label>Elemento para ajustar a fonte</label><select id="edEtqFonteElemento" class="input" onchange="atualizarControlesFonteEtiqueta();atualizarFamiliaFonteEtiqueta()"><option value="titulo">Título do produto</option><option value="numero">Número da etiqueta</option><option value="lote">Lote</option><option value="validade">Validade</option><option value="contato">Cabeçalho de contato</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="qrCodigo">Código abaixo do QR</option></select></div>
+                  <div class="field full"><label>Tamanho da fonte: <b id="edEtqFontePxVal">12 px</b></label><input id="edEtqFontePx" type="range" min="5" max="36" step="1" value="12" class="input" oninput="alterarTamanhoFonteEtiqueta(this.value)"></div>
                   <div class="field"><label>Arredondamento: <b id="edEtqRaioVal">${Number(l.raioBorda ?? 12)} px</b></label><input id="edEtqRaio" type="range" min="0" max="28" value="${Number(l.raioBorda ?? 12)}" class="input" oninput="atualizarEditorEtiqueta()"></div>
                   <div class="field"><label>Borda: <b id="edEtqBordaVal">${Number(l.espessuraBorda ?? 2)} px</b></label><input id="edEtqEspessura" type="range" min="0" max="6" value="${Number(l.espessuraBorda ?? 2)}" class="input" oninput="atualizarEditorEtiqueta()"></div>
                   <div class="field full"><label>Elementos visíveis</label>
@@ -2769,6 +2773,7 @@ ${baseConfig.cuidados}
       const sheet = document.getElementById('edEtqStage');
       if (sheet) { const first = sheet.querySelector('.label-card'); if (first) { sheet.innerHTML = ''; sheet.appendChild(first); } }
       atualizarEditorEtiqueta(false);
+      atualizarControlesFonteEtiqueta();
       definirZoomEtiqueta(100);
       ativarArrasteEtiqueta();
     }
@@ -2856,6 +2861,65 @@ ${baseConfig.cuidados}
       }
     }
 
+    const ETQ_FONT_SELECTORS = {titulo:'.label-name', numero:'.label-num', lote:'[data-etq-drag="lote"]', validade:'[data-etq-drag="validade"]', contato:'.label-contact-title', whatsapp:'[data-etq-drag="whatsapp"]', instagram:'[data-etq-drag="instagram"]', qrCodigo:'.label-code'};
+    function aplicarFontesEtiqueta(root, layout) {
+      if (!root || !layout) return;
+      const map = layout.fontesPx || {};
+      Object.entries(ETQ_FONT_SELECTORS).forEach(([key, selector]) => {
+        const el = root.querySelector(selector);
+        if (el && Number(map[key]) > 0) el.style.fontSize = Number(map[key]) + 'px';
+      });
+    }
+    function aplicarFamiliasFonteEtiqueta(root, layout) {
+      if (!root || !layout) return;
+      const familias = layout.fontesFamilia || {};
+      Object.entries(ETQ_FONT_SELECTORS).forEach(([key, selector]) => {
+        const el = root.querySelector(selector);
+        if (el) {
+          const familia = familias[key] || (key === 'titulo' ? (layout.fonteTitulo || 'Fraunces') : null);
+          if (familia) el.style.setProperty('font-family', `\"${familia}\"`, 'important');
+        }
+      });
+    }
+
+    function atualizarFamiliaFonteEtiqueta() {
+      const l = window.ETQ_EDITOR_DRAFT || DB.etiquetaLayout || defaultEtiquetaLayout();
+      const key = document.getElementById('edEtqFonteElemento')?.value || 'titulo';
+      const select = document.getElementById('edEtqFonteFamilia');
+      if (select) {
+        const familia = (l.fontesFamilia || {})[key] || (key === 'titulo' ? (l.fonteTitulo || 'Fraunces') : 'Fraunces');
+        select.value = familia;
+      }
+      const stage = document.getElementById('edEtqStage');
+      if (stage) aplicarFamiliasFonteEtiqueta(stage.querySelector('.label-card'), l);
+    }
+    function alterarTamanhoFonteEtiqueta(valor) {
+      const l = window.ETQ_EDITOR_DRAFT || (window.ETQ_EDITOR_DRAFT = JSON.parse(JSON.stringify(DB.etiquetaLayout || defaultEtiquetaLayout())));
+      const key = document.getElementById('edEtqFonteElemento')?.value || 'titulo';
+      const px = Math.max(5, Math.min(36, Number(valor) || 12));
+      l.fontesPx ||= {};
+      l.fontesPx[key] = px;
+      const label = document.getElementById('edEtqFontePxVal');
+      if (label) label.textContent = px + ' px';
+      const stage = document.getElementById('edEtqStage');
+      const card = stage?.querySelector('.label-card');
+      const selector = ETQ_FONT_SELECTORS[key];
+      if (card && selector) {
+        const el = card.querySelector(selector);
+        if (el) el.style.setProperty('font-size', px + 'px', 'important');
+      }
+      // Atualiza também as etiquetas já renderizadas, sem alterar os demais elementos.
+      document.querySelectorAll('.label-card').forEach(c => aplicarFontesEtiqueta(c, l));
+    }
+
+    function atualizarControlesFonteEtiqueta() {
+      const l = window.ETQ_EDITOR_DRAFT || DB.etiquetaLayout || defaultEtiquetaLayout();
+      const key = document.getElementById('edEtqFonteElemento')?.value || 'titulo';
+      const px = Number(l.fontesPx?.[key]) || ({titulo:18,numero:12,lote:8,validade:8,contato:8,whatsapp:8,instagram:8,qrCodigo:6}[key] || 12);
+      const range = document.getElementById('edEtqFontePx'), label = document.getElementById('edEtqFontePxVal');
+      if (range) range.value = String(px); if (label) label.textContent = px + ' px';
+    }
+
     function atualizarEditorEtiqueta(persistirAgora = false) {
       const l = window.ETQ_EDITOR_DRAFT || (window.ETQ_EDITOR_DRAFT = JSON.parse(JSON.stringify(DB.etiquetaLayout || defaultEtiquetaLayout())));
       const val = id => document.getElementById(id);
@@ -2864,7 +2928,15 @@ ${baseConfig.cuidados}
       if (val('edEtqTexto')) l.corTexto = val('edEtqTexto').value;
       if (val('edEtqBorda')) l.corBorda = val('edEtqBorda').value;
       if (val('edEtqDestaque')) l.corDestaque = val('edEtqDestaque').value;
-      if (val('edEtqFonteTitulo')) l.fonteTitulo = val('edEtqFonteTitulo').value;
+      if (val('edEtqFonteFamilia') && val('edEtqFonteElemento')) {
+        const fontKey = val('edEtqFonteElemento').value;
+        l.fontesFamilia ||= {};
+        l.fontesFamilia[fontKey] = val('edEtqFonteFamilia').value;
+      }
+      if (val('edEtqLarguraCm')) l.larguraCm = Math.max(2, Math.min(30, Number(val('edEtqLarguraCm').value)||9));
+      if (val('edEtqAlturaCm')) l.alturaCm = Math.max(1, Math.min(20, Number(val('edEtqAlturaCm').value)||4));
+      if (val('edEtqFonteElemento') && val('edEtqFontePx')) { l.fontesPx ||= {}; l.fontesPx[val('edEtqFonteElemento').value] = Number(val('edEtqFontePx').value)||12; }
+      if (val('edEtqFontePxVal') && val('edEtqFontePx')) val('edEtqFontePxVal').textContent = val('edEtqFontePx').value + ' px';
       if (val('edEtqRaio')) l.raioBorda = Number(val('edEtqRaio').value);
       if (val('edEtqEspessura')) l.espessuraBorda = Number(val('edEtqEspessura').value);
       if (val('edEtqLote')) l.mostrarLote = val('edEtqLote').checked;
@@ -2883,7 +2955,10 @@ ${baseConfig.cuidados}
           card.style.setProperty('--etq-editor-accent', l.corDestaque || '#7a1f3d');
           card.style.setProperty('--etq-editor-radius', (l.raioBorda ?? 12) + 'px');
           card.style.setProperty('--etq-editor-border-width', (l.espessuraBorda ?? 2) + 'px');
-          card.style.setProperty('--etq-editor-title-font', "'" + (l.fonteTitulo || 'Fraunces') + "'");
+          card.style.setProperty('--etq-editor-title-font', "'" + ((l.fontesFamilia||{}).titulo || l.fonteTitulo || 'Fraunces') + "'");
+          card.style.width = (Number(l.larguraCm)||9) + 'cm'; card.style.minHeight = (Number(l.alturaCm)||4) + 'cm';
+          aplicarFontesEtiqueta(card, l);
+          aplicarFamiliasFonteEtiqueta(card, l);
           const lote = card.querySelector('.label-lote'); if (lote) lote.style.display = l.mostrarLote ? '' : 'none';
           const contato = card.querySelector('.label-contact-title'); if (contato) { contato.style.display = l.mostrarContato ? '' : 'none'; contato.textContent = l.textoContatoTitulo || ''; contato.style.display = (l.mostrarContato && !!l.textoContatoTitulo.trim()) ? '' : 'none'; }
           const whats = card.querySelector('.label-contact-line'); if (whats) whats.style.display = l.mostrarWhatsApp ? '' : 'none';
@@ -2947,6 +3022,7 @@ ${baseConfig.cuidados}
       root.style.setProperty('--lbl-title-scale', layout.tituloScale || 1);
       root.style.setProperty('--etq-page-w', largura + 'cm');
       root.style.setProperty('--etq-page-h', altura + 'cm');
+      document.querySelectorAll('.label-card').forEach(card => { card.style.width = largura + 'cm'; card.style.minHeight = altura + 'cm'; aplicarFontesEtiqueta(card, layout); aplicarFamiliasFonteEtiqueta(card, layout); });
 
       ajustarFonteTitulo();
     };
