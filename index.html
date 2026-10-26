@@ -441,15 +441,15 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     position: relative; width: var(--lbl-w, 9cm); min-height: var(--lbl-h, 4cm);
     box-sizing: border-box; border: 2px solid #111; border-radius: 12px;
     padding: clamp(7px, calc(var(--lbl-w, 9cm) * 0.032), 16px);
-    background: #fff; display: flex; flex-direction: column;
+    background: var(--etq-editor-bg, #fff); display: flex; flex-direction: column;
     gap: clamp(4px, calc(var(--lbl-w, 9cm) * 0.022), 10px);
-    font-family: var(--lbl-font-body, 'Manrope'), system-ui, sans-serif;
-    color: #111; break-inside: avoid; page-break-inside: avoid;
+    font-family: var(--etq-editor-body-font, var(--lbl-font-body, 'Manrope')), system-ui, sans-serif;
+    color: var(--etq-editor-text, #111); border-color: var(--etq-editor-border, #111); border-width: var(--etq-editor-border-width, 2px); border-radius: var(--etq-editor-radius, 12px); break-inside: avoid; page-break-inside: avoid;
   }
   .label-header { display: flex; align-items: flex-start; width: 100%; }
   .label-name {
     flex: 1 1 auto; min-width: 0;
-    font-family: var(--lbl-font-title, 'Fraunces'), serif;
+    font-family: var(--etq-editor-title-font, var(--lbl-font-title, 'Fraunces')), serif; color: var(--etq-editor-accent, inherit);
     font-weight: 800; line-height: 1.1; margin-bottom: 4px;
     font-size: clamp(1rem, calc(var(--lbl-w, 9cm) * 0.095 * var(--lbl-title-scale, 1)), 3.4rem);
     white-space: normal; overflow-wrap: break-word;
@@ -469,10 +469,42 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   .label-contact-line .ico { font-size: 1.05em; line-height: 1; flex-shrink: 0; }
   .label-qr-block { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; margin-top: auto; }
   .label-card.orient-vertical .label-qr-block { width: 100%; }
-  .label-qr-frame { border: 1.5px solid #111; border-radius: 9px; padding: clamp(2px, calc(var(--lq) * 0.04), 6px); background: #fff; line-height: 0; }
+  .label-qr-frame { border: 0; border-radius: 0; padding: 0; background: transparent; line-height: 0; }
   .label-qr-frame img { display: block; width: var(--lq); height: var(--lq); }
   .label-code { font-family: 'IBM Plex Mono', monospace; font-size: clamp(6px, calc(var(--lq) * 0.11), 12px); color: #222; text-align: center; white-space: nowrap; }
   .labels-sheet { display: flex; flex-wrap: wrap; gap: var(--lbl-gap, 3mm); }
+  /* Editor visual de etiquetas: estilos isolados deste módulo */
+  .etq-editor-modal { width:100vw!important; max-width:none!important; height:100dvh!important; max-height:100dvh!important; margin:0!important; border-radius:0!important; overflow:auto; }
+  .etq-editor-modal .modal-body { min-height:0; }
+  .etq-editor-modal .etq-editor-grid { grid-template-columns:minmax(280px,360px) minmax(0,1fr); }
+  .etq-editor-modal .etq-editor-stage { min-height:calc(100dvh - 220px); }
+  .etq-editor-modal .label-card [data-etq-drag] { cursor:grab; touch-action:none; position:relative; }
+  .etq-editor-modal .label-card [data-etq-drag].etq-selected { outline:1px solid #7a1f3d; outline-offset:2px; }
+  .etq-resize-handle { position:absolute; right:-5px; bottom:-5px; width:11px; height:11px; background:#7a1f3d; border:2px solid white; border-radius:50%; cursor:nwse-resize; z-index:20; }
+  .etq-editor-modal .label-card [data-etq-drag] .etq-resize-handle { display:none; }
+  .etq-editor-modal .label-card [data-etq-drag].etq-selected .etq-resize-handle { display:block; }
+  .etq-editor-modal .label-card [data-etq-drag].etq-dragging { cursor:grabbing; outline:1px dashed #9a6849; }
+  .etq-editor-modal .label-card { position:relative; }
+  .etq-snap-guide { position:absolute; z-index:50; pointer-events:none; background:#1687ff; box-shadow:0 0 1px #fff; }
+  .etq-snap-guide.etq-guide-v { top:0; bottom:0; width:1px; }
+  .etq-snap-guide.etq-guide-h { left:0; right:0; height:1px; }
+  @media(max-width:760px) { .etq-editor-modal .etq-editor-grid { grid-template-columns:1fr; } .etq-editor-modal .etq-editor-stage { min-height:260px; } }
+  .etq-editor-grid { display:grid; grid-template-columns:minmax(245px,310px) minmax(0,1fr); gap:18px; }
+  .etq-editor-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; align-content:start; }
+  .etq-editor-controls .field { margin:0; min-width:0; }
+  .etq-editor-controls .field.full { grid-column:1/-1; }
+  .etq-editor-stage { min-height:330px; display:flex; align-items:center; justify-content:center; padding:22px; border-radius:14px; background:repeating-conic-gradient(#e9e9e9 0% 25%,#f5f5f5 0% 50%) 50% / 18px 18px; overflow:auto; }
+  .etq-editor-stage .label-card { transform:scale(.94); transform-origin:center; flex-shrink:0; }
+  .etq-editor-zoombar { display:flex; align-items:center; justify-content:center; gap:10px; margin:0 0 10px; flex-wrap:wrap; }
+  .etq-editor-zoombar button { min-width:34px; padding:5px 10px; border:1px solid var(--line); border-radius:7px; background:var(--surface); cursor:pointer; }
+  .etq-editor-zoombar input[type=range] { width:min(220px,40%); }
+  .etq-editor-zoombar .zoom-value { min-width:46px; font-size:12px; font-weight:700; text-align:center; }
+  .etq-editor-stage .label-card { background:var(--etq-editor-bg,#fff); color:var(--etq-editor-text,#171717); border-color:var(--etq-editor-border,#171717); border-width:var(--etq-editor-border-width,2px); border-radius:var(--etq-editor-radius,12px); }
+  .etq-editor-stage .label-name { font-family:var(--etq-editor-title-font,'Fraunces'),serif; color:var(--etq-editor-accent,#7a1f3d); }
+  .etq-editor-stage .label-contact-title { color:var(--etq-editor-accent,#7a1f3d); }
+  .etq-editor-stage .label-card, .etq-editor-stage .label-card * { transition:color .12s,background-color .12s,border-color .12s; }
+  @media(max-width:760px) { .etq-editor-grid { grid-template-columns:1fr; } .etq-editor-controls { grid-template-columns:1fr 1fr; } .etq-editor-stage { min-height:240px; padding:8px; } }
+
 
   @media print {
     @page { margin: 8mm; }
@@ -694,9 +726,12 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
       return {
         larguraCm: 9, alturaCm: 4, orientacao: 'horizontal', gapMm: 3,
         tituloScale: 1,
+        fundo: '#ffffff', corTexto: '#171717', corBorda: '#171717', corDestaque: '#7a1f3d',
+        raioBorda: 12, espessuraBorda: 2, fonteTitulo: 'Fraunces', fonteCorpo: 'Manrope',
+        mostrarLote: true, mostrarContato: true, mostrarInstagram: true, mostrarWhatsApp: true,
+        textoContatoTitulo: '',
         whatsapp: cfg.whatsapp || '(32) 98448-1635',
         instagram: cfg.instagram || 'almeidadocergourmet',
-        textoContatoTitulo: 'ATENDIMENTO / VENDAS',
       };
     }
 
@@ -2618,7 +2653,7 @@ ${baseConfig.cuidados}
 
     function renderLabelsSheetHtml() {
       const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
-      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
+      const producoesComItens = DB.producoes.filter(p => (p.itens || []).some(bipItemDisponivel)); // só lotes com etiqueta ainda em estoque
       const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
         ? window.ETQ_PRODUCAO_ID
         : (producoesComItens[producoesComItens.length - 1]?.id || '');
@@ -2628,25 +2663,25 @@ ${baseConfig.cuidados}
       const whats = layout.whatsapp || DB.config.whatsapp || '';
       const insta = layout.instagram || DB.config.instagram || '';
 
-      if (!prod) return '<p class="empty">Nenhuma etiqueta gerada recentemente.</p>';
+      if (!prod) return '<p class="empty">Nenhuma produção com estoque disponível para imprimir etiquetas.</p>';
 
       return (prod.itens || []).map((it, idx) => `
-        <div class="label-card ${orientClass}">
+        <div class="label-card ${orientClass}" style="--etq-editor-bg:${esc(layout.fundo || '#ffffff')};--etq-editor-text:${esc(layout.corTexto || '#171717')};--etq-editor-border:${esc(layout.corBorda || '#171717')};--etq-editor-accent:${esc(layout.corDestaque || '#7a1f3d')};--etq-editor-radius:${Number(layout.raioBorda ?? 12)}px;--etq-editor-border-width:${Number(layout.espessuraBorda ?? 2)}px;--etq-editor-title-font:'${esc(layout.fonteTitulo || 'Fraunces')}';--etq-editor-body-font:'${esc(layout.fonteCorpo || 'Manrope')}';">
           <div class="label-header">
-            <div class="label-name">${esc(p ? p.nome : 'Produto')}</div>
-            <div class="label-num">N°${idx + 1}</div>
+            <div class="label-name" data-etq-drag="titulo" style="transform:translate(${Number(layout.posicoes?.titulo?.x)||0}px,${Number(layout.posicoes?.titulo?.y)||0}px) scale(${Number(layout.tamanhos?.titulo)||1});transform-origin:top left">${esc(p ? p.nome : 'Produto')}</div>
+            <div class="label-num" data-etq-drag="numero" style="transform:translate(${Number(layout.posicoes?.numero?.x)||0}px,${Number(layout.posicoes?.numero?.y)||0}px) scale(${Number(layout.tamanhos?.numero)||1});transform-origin:top right">N°${idx + 1}</div>
           </div>
           <div class="label-body">
             <div class="label-main">
-              <div class="label-lote">
-                <span>LOTE: <b>${esc(prod.lote || '')}</b></span>
-                <span>VAL: <b>${fmtDate(prod.dataValidade)}</b></span>
+              <div class="label-lote" style="${layout.mostrarLote === false ? 'display:none;' : ''}">
+                <span data-etq-drag="lote" style="display:block;transform:translate(${Number(layout.posicoes?.lote?.x)||0}px,${Number(layout.posicoes?.lote?.y)||0}px) scale(${Number(layout.tamanhos?.lote)||1});transform-origin:top left">LOTE: <b>${esc(prod.lote || '')}</b></span>
+                <span data-etq-drag="validade" style="display:block;transform:translate(${Number(layout.posicoes?.validade?.x)||0}px,${Number(layout.posicoes?.validade?.y)||0}px) scale(${Number(layout.tamanhos?.validade)||1});transform-origin:top left">VAL: <b>${fmtDate(prod.dataValidade)}</b></span>
               </div>
-              <div class="label-contact-title">${esc(layout.textoContatoTitulo || 'ATENDIMENTO / VENDAS')}</div>
-              <div class="label-contact-line"><span class="ico">📱</span> WhatsApp: ${esc(whats)}</div>
-              <div class="label-contact-line"><span class="ico">📷</span> Instagram: ${esc(insta)}</div>
+              <div class="label-contact-title" data-etq-drag="contato" style="${layout.mostrarContato === false || !layout.textoContatoTitulo ? 'display:none;' : ''}transform:translate(${Number(layout.posicoes?.contato?.x)||0}px,${Number(layout.posicoes?.contato?.y)||0}px) scale(${Number(layout.tamanhos?.contato)||1});transform-origin:top left;">${esc(layout.textoContatoTitulo || '')}</div>
+              <div class="label-contact-line" data-etq-drag="whatsapp" style="${layout.mostrarWhatsApp === false ? 'display:none;' : ''}transform:translate(${Number(layout.posicoes?.whatsapp?.x)||0}px,${Number(layout.posicoes?.whatsapp?.y)||0}px) scale(${Number(layout.tamanhos?.whatsapp)||1});transform-origin:top left;"><span class="ico">📱</span> WhatsApp: ${esc(whats)}</div>
+              <div class="label-contact-line" data-etq-drag="instagram" style="${layout.mostrarInstagram === false ? 'display:none;' : ''}transform:translate(${Number(layout.posicoes?.instagram?.x)||0}px,${Number(layout.posicoes?.instagram?.y)||0}px) scale(${Number(layout.tamanhos?.instagram)||1});transform-origin:top left;"><span class="ico">📷</span> Instagram: ${esc(insta)}</div>
             </div>
-            <div class="label-qr-block">
+            <div class="label-qr-block" data-etq-drag="qr" style="transform:translate(${Number(layout.posicoes?.qr?.x)||0}px,${Number(layout.posicoes?.qr?.y)||0}px) scale(${Number(layout.tamanhos?.qr)||1});transform-origin:bottom right">
               <div class="label-qr-frame"><img src="${gerarQrDataUrl(it.codigo)}" alt="QR Code"></div>
               <div class="label-code">${esc(it.codigo)}</div>
             </div>
@@ -2657,7 +2692,7 @@ ${baseConfig.cuidados}
 
     function viewEtiquetas() {
       const layout = DB.etiquetaLayout || defaultEtiquetaLayout();
-      const producoesComItens = DB.producoes.filter(p => (p.itens || []).length);
+      const producoesComItens = DB.producoes.filter(p => (p.itens || []).some(bipItemDisponivel)); // só lotes com etiqueta ainda em estoque
       const producaoSelId = window.ETQ_PRODUCAO_ID && producoesComItens.some(p => p.id === window.ETQ_PRODUCAO_ID)
         ? window.ETQ_PRODUCAO_ID
         : (producoesComItens[producoesComItens.length - 1]?.id || '');
@@ -2667,9 +2702,10 @@ ${baseConfig.cuidados}
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
             <div>
               <h3>Impressão e Gerador de Etiquetas</h3>
-              <p class="hint">Selecione uma produção recente para visualizar e imprimir as etiquetas com QR Code.</p>
+              <p class="hint">Selecione uma produção com estoque para visualizar e imprimir as etiquetas com QR Code. Produções com o estoque zerado não aparecem aqui.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="abrirEditorEtiqueta()">🎨 Editar etiqueta</button>
               <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir Etiquetas</button>
               <button class="btn btn-primary" onclick="salvarEtiquetasPDF()">📄 Salvar como PDF</button>
             </div>
@@ -2683,48 +2719,11 @@ ${baseConfig.cuidados}
             <select class="input" onchange="window.ETQ_PRODUCAO_ID = this.value; render();">
               ${producoesComItens.map(pr => {
                 const prNome = (findProduto(pr.produtoId) || {}).nome || 'Produto';
-                return `<option value="${pr.id}" ${pr.id === producaoSelId ? 'selected' : ''}>${esc(prNome)} — Lote ${esc(pr.lote)} (${(pr.itens || []).length} un.)</option>`;
+                return `<option value="${pr.id}" ${pr.id === producaoSelId ? 'selected' : ''}>${esc(prNome)} — Lote ${esc(pr.lote)} (${(pr.itens || []).filter(bipItemDisponivel).length} em estoque de ${(pr.itens || []).length})</option>`;
               }).join('')}
             </select>
           </div>
           ` : ''}
-
-          <div class="grid grid-4" style="margin:16px 0;">
-            <div class="field">
-              <label>📱 WhatsApp</label>
-              <input type="text" id="etqWhats" class="input" value="${esc(layout.whatsapp || DB.config.whatsapp || '')}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field">
-              <label>📷 Instagram</label>
-              <input type="text" id="etqInsta" class="input" value="${esc(layout.instagram || DB.config.instagram || '')}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field">
-              <label>Largura (cm)</label>
-              <input type="number" step="0.1" min="1" id="etqLargura" class="input" value="${layout.larguraCm}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field">
-              <label>Altura (cm)</label>
-              <input type="number" step="0.1" min="1" id="etqAltura" class="input" value="${layout.alturaCm}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-          </div>
-          <div class="grid grid-4" style="margin-bottom:8px;">
-            <div class="field">
-              <label>Orientação do conteúdo</label>
-              <select id="etqOrientacao" class="input" onchange="atualizarLayoutEtiqueta()">
-                <option value="horizontal" ${layout.orientacao !== 'vertical' ? 'selected' : ''}>Horizontal (QR ao lado)</option>
-                <option value="vertical" ${layout.orientacao === 'vertical' ? 'selected' : ''}>Vertical (QR abaixo)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Espaçamento: <b id="etqGapVal">${layout.gapMm}mm</b></label>
-              <input type="range" min="0" max="15" step="0.5" id="etqGap" class="input" value="${layout.gapMm}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-            <div class="field" style="grid-column: span 2;">
-              <label>Fonte do título (ajuste fino): <b id="etqTituloVal">${Math.round((layout.tituloScale || 1) * 100)}%</b></label>
-              <input type="range" min="0.6" max="2.2" step="0.05" id="etqTituloScale" class="input" value="${layout.tituloScale || 1}" oninput="atualizarLayoutEtiqueta()">
-            </div>
-          </div>
-          <p class="hint" style="margin-top:-4px;">O título ocupa toda a largura livre da etiqueta (até o N°) e cresce de verdade conforme o ajuste fino — nomes muito longos quebram para a 2ª linha em vez de serem espremidos. O QR Code mantém tamanho estável e não é afetado pela Altura — apenas pela Largura.</p>
 
           <div class="divider"></div>
           <div class="labels-sheet" id="labelsSheet">
@@ -2732,6 +2731,177 @@ ${baseConfig.cuidados}
           </div>
         </div>
       `;
+    }
+
+    function abrirEditorEtiqueta() {
+      const l = DB.etiquetaLayout || (DB.etiquetaLayout = defaultEtiquetaLayout());
+      window.ETQ_EDITOR_DRAFT = JSON.parse(JSON.stringify(l));
+      const opts = (items, selected) => items.map(([v,t]) => `<option value="${v}" ${selected===v?'selected':''}>${t}</option>`).join('');
+      document.getElementById('modalRoot').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target.classList.contains('modal-backdrop')) fecharModalDirect();">
+          <div class="modal etq-editor-modal">
+            <div class="modal-head"><div><h3>Editor visual de etiquetas</h3><p class="hint">Personalize o visual e acompanhe a prévia em tempo real.</p></div><button class="modal-close" onclick="fecharModalDirect()">×</button></div>
+            <div class="modal-body">
+              <div class="etq-editor-grid">
+                <div class="etq-editor-controls">
+                  <div class="field full"><label>Texto do cabeçalho de contato (opcional)</label><input placeholder="Deixe vazio para ocultar" id="edEtqContato" class="input" value="${esc(l.textoContatoTitulo || '')}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Fundo</label><input id="edEtqFundo" type="color" class="input" value="${esc(l.fundo || '#ffffff')}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Cor do texto</label><input id="edEtqTexto" type="color" class="input" value="${esc(l.corTexto || '#171717')}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Cor da borda</label><input id="edEtqBorda" type="color" class="input" value="${esc(l.corBorda || '#171717')}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Cor de destaque</label><input id="edEtqDestaque" type="color" class="input" value="${esc(l.corDestaque || '#7a1f3d')}" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field full"><label>Fonte do título</label><select id="edEtqFonteTitulo" class="input" onchange="atualizarEditorEtiqueta()">${opts([['Fraunces','Elegante (Fraunces)'],['Manrope','Moderna (Manrope)'],['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana']],l.fonteTitulo || 'Fraunces')}</select></div>
+                  <div class="field"><label>Arredondamento: <b id="edEtqRaioVal">${Number(l.raioBorda ?? 12)} px</b></label><input id="edEtqRaio" type="range" min="0" max="28" value="${Number(l.raioBorda ?? 12)}" class="input" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field"><label>Borda: <b id="edEtqBordaVal">${Number(l.espessuraBorda ?? 2)} px</b></label><input id="edEtqEspessura" type="range" min="0" max="6" value="${Number(l.espessuraBorda ?? 2)}" class="input" oninput="atualizarEditorEtiqueta()"></div>
+                  <div class="field full"><label>Elementos visíveis</label>
+                    <label style="display:flex;gap:7px;align-items:center;text-transform:none;margin:7px 0"><input id="edEtqLote" type="checkbox" ${l.mostrarLote === false?'':'checked'} onchange="atualizarEditorEtiqueta()"> Lote e validade</label>
+                    <label style="display:flex;gap:7px;align-items:center;text-transform:none;margin:7px 0"><input id="edEtqContatoVis" type="checkbox" ${l.mostrarContato === false?'':'checked'} onchange="atualizarEditorEtiqueta()"> Título do contato</label>
+                    <label style="display:flex;gap:7px;align-items:center;text-transform:none;margin:7px 0"><input id="edEtqWhatsVis" type="checkbox" ${l.mostrarWhatsApp === false?'':'checked'} onchange="atualizarEditorEtiqueta()"> WhatsApp</label>
+                    <label style="display:flex;gap:7px;align-items:center;text-transform:none;margin:7px 0"><input id="edEtqInstaVis" type="checkbox" ${l.mostrarInstagram === false?'':'checked'} onchange="atualizarEditorEtiqueta()"> Instagram</label>
+                  </div>
+                </div>
+                <div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b>Prévia da etiqueta</b><span class="hint">Atualização instantânea</span></div><div class="etq-editor-zoombar"><button type="button" onclick="ajustarZoomEtiqueta(-10)" aria-label="Diminuir zoom">−</button><input id="edEtqZoom" type="range" min=50 max=250 step=10 value=100 oninput="definirZoomEtiqueta(this.value)" aria-label="Zoom da prévia"><span class="zoom-value" id="edEtqZoomVal">100%</span><button type="button" onclick="ajustarZoomEtiqueta(10)" aria-label="Aumentar zoom">+</button><button type="button" onclick="definirZoomEtiqueta(100)">Redefinir</button></div><div class="etq-editor-stage" id="edEtqStage">${renderLabelsSheetHtml()}</div><p class="hint">Use +/− ou o controle de zoom para ver a etiqueta em mais detalhes. Arraste os elementos para reposicioná-los.</p></div>
+              </div>
+            </div>
+            <div class="modal-foot"><button class="btn btn-secondary" onclick="fecharModalDirect()">Cancelar</button><button class="btn btn-primary" onclick="salvarEditorEtiqueta()">Salvar design</button></div>
+          </div>
+        </div>`;
+      // Garante que a prévia contenha somente a primeira etiqueta completa.
+      const sheet = document.getElementById('edEtqStage');
+      if (sheet) { const first = sheet.querySelector('.label-card'); if (first) { sheet.innerHTML = ''; sheet.appendChild(first); } }
+      atualizarEditorEtiqueta(false);
+      definirZoomEtiqueta(100);
+      ativarArrasteEtiqueta();
+    }
+
+
+    function definirZoomEtiqueta(valor) {
+      const zoom = Math.max(50, Math.min(250, Number(valor) || 100));
+      const input = document.getElementById('edEtqZoom');
+      const label = document.getElementById('edEtqZoomVal');
+      const card = document.querySelector('#edEtqStage .label-card');
+      if (input) input.value = String(zoom);
+      if (label) label.textContent = zoom + '%';
+      if (card) { card.style.zoom = String(zoom / 100); }
+    }
+
+    function ajustarZoomEtiqueta(delta) {
+      const input = document.getElementById('edEtqZoom');
+      definirZoomEtiqueta((Number(input?.value) || 100) + delta);
+    }
+
+    function ativarArrasteEtiqueta() {
+      const stage = document.getElementById('edEtqStage');
+      const card = stage && stage.querySelector('.label-card');
+      if (!card) return;
+      const removeGuides = () => card.querySelectorAll('.etq-snap-guide').forEach(g => g.remove());
+      const guide = (axis, value) => {
+        let g = card.querySelector('.etq-guide-' + axis);
+        if (!g) { g = document.createElement('i'); g.className = 'etq-snap-guide etq-guide-' + axis; card.appendChild(g); }
+        if (axis === 'v') g.style.left = value + 'px'; else g.style.top = value + 'px';
+      };
+      card.querySelectorAll('[data-etq-drag]').forEach(el => {
+        if (el.dataset.etqDragBound === '1') return;
+        el.dataset.etqDragBound = '1';
+        el.title = 'Clique para selecionar; arraste para mover; use o ponto no canto para redimensionar';
+        el.addEventListener('pointerdown', ev => {
+          if (ev.button !== 0) return;
+          ev.preventDefault(); ev.stopPropagation();
+          const key = el.dataset.etqDrag;
+          card.querySelectorAll('[data-etq-drag]').forEach(n => n.classList.remove('etq-selected'));
+          el.classList.add('etq-selected');
+          let handle = el.querySelector('.etq-resize-handle');
+          if (!handle) { handle = document.createElement('span'); handle.className = 'etq-resize-handle'; handle.title = 'Arraste para aumentar ou diminuir'; el.appendChild(handle); }
+          const pos = (window.ETQ_EDITOR_DRAFT.posicoes ||= {}), sizes = (window.ETQ_EDITOR_DRAFT.tamanhos ||= {});
+          const old = pos[key] || {x:0,y:0}; const x0=Number(old.x)||0, y0=Number(old.y)||0;
+          const size0=Number(sizes[key])||1, startX=ev.clientX, startY=ev.clientY;
+          const resizing = ev.target === handle;
+          const snapDistance = 6;
+          el.classList.add('etq-dragging'); el.setPointerCapture?.(ev.pointerId);
+          const move = e => {
+            if (resizing) {
+              const scale=Math.max(.45,Math.min(2.8,size0+((e.clientX-startX)+(e.clientY-startY))/130));
+              sizes[key]=Math.round(scale*100)/100;
+              const x=Number(pos[key]?.x)||0,y=Number(pos[key]?.y)||0;
+              el.style.transform=`translate(${x}px,${y}px) scale(${sizes[key]})`;
+              return;
+            }
+            removeGuides();
+            let x=x0+e.clientX-startX, y=y0+e.clientY-startY;
+            const cardRect=card.getBoundingClientRect();
+            const movingRect=el.getBoundingClientRect();
+            const others=[...card.querySelectorAll('[data-etq-drag]')].filter(n=>n!==el && n.offsetWidth && n.offsetHeight);
+            const candidateX=[{value:0,screen:cardRect.left},{value:cardRect.width/2-movingRect.width/2,screen:cardRect.left+cardRect.width/2},{value:cardRect.width-movingRect.width,screen:cardRect.right-movingRect.width}];
+            const candidateY=[{value:0,screen:cardRect.top},{value:cardRect.height/2-movingRect.height/2,screen:cardRect.top+cardRect.height/2},{value:cardRect.height-movingRect.height,screen:cardRect.bottom-movingRect.height}];
+            let bestX=null,bestY=null;
+            others.forEach(n=>{
+              const r=n.getBoundingClientRect();
+              const xs=[{screen:r.left,value:x0+(r.left-movingRect.left)},{screen:r.left+r.width/2,value:x0+(r.left+r.width/2-(movingRect.left+movingRect.width/2))},{screen:r.right,value:x0+(r.right-movingRect.right)}];
+              const ys=[{screen:r.top,value:y0+(r.top-movingRect.top)},{screen:r.top+r.height/2,value:y0+(r.top+r.height/2-(movingRect.top+movingRect.height/2))},{screen:r.bottom,value:y0+(r.bottom-movingRect.bottom)}];
+              xs.forEach(a=>{const delta=Math.abs((movingRect.left + (x-x0) + (a.screen-movingRect.left))-a.screen); const screenDelta=Math.abs((movingRect.left+(e.clientX-startX))-a.screen); if(screenDelta<=snapDistance && (!bestX||screenDelta<bestX.delta)) bestX={delta:screenDelta,offset:a.screen-cardRect.left};});
+              ys.forEach(a=>{const screenDelta=Math.abs((movingRect.top+(e.clientY-startY))-a.screen); if(screenDelta<=snapDistance && (!bestY||screenDelta<bestY.delta)) bestY={delta:screenDelta,offset:a.screen-cardRect.top};});
+            });
+            const scaleX=cardRect.width/(card.offsetWidth||cardRect.width), scaleY=cardRect.height/(card.offsetHeight||cardRect.height);
+            if(bestX){ x += (bestX.offset-(movingRect.left-cardRect.left))/scaleX; guide('v',bestX.offset/scaleX); }
+            if(bestY){ y += (bestY.offset-(movingRect.top-cardRect.top))/scaleY; guide('h',bestY.offset/scaleY); }
+            x=Math.round(x); y=Math.round(y); pos[key]={x,y};
+            el.style.transform=`translate(${x}px,${y}px) scale(${size0})`;
+          };
+          const up = () => { el.classList.remove('etq-dragging'); removeGuides(); el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up); el.removeEventListener('pointercancel',up); };
+          el.addEventListener('pointermove',move); el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up);
+        });
+      });
+      if (!card.dataset.etqDeselectBound) {
+        card.dataset.etqDeselectBound='1';
+        card.addEventListener('pointerdown', ev => { if (ev.target === card) card.querySelectorAll('[data-etq-drag]').forEach(n=>n.classList.remove('etq-selected')); });
+      }
+    }
+
+    function atualizarEditorEtiqueta(persistirAgora = false) {
+      const l = window.ETQ_EDITOR_DRAFT || (window.ETQ_EDITOR_DRAFT = JSON.parse(JSON.stringify(DB.etiquetaLayout || defaultEtiquetaLayout())));
+      const val = id => document.getElementById(id);
+      if (val('edEtqContato')) l.textoContatoTitulo = val('edEtqContato').value;
+      if (val('edEtqFundo')) l.fundo = val('edEtqFundo').value;
+      if (val('edEtqTexto')) l.corTexto = val('edEtqTexto').value;
+      if (val('edEtqBorda')) l.corBorda = val('edEtqBorda').value;
+      if (val('edEtqDestaque')) l.corDestaque = val('edEtqDestaque').value;
+      if (val('edEtqFonteTitulo')) l.fonteTitulo = val('edEtqFonteTitulo').value;
+      if (val('edEtqRaio')) l.raioBorda = Number(val('edEtqRaio').value);
+      if (val('edEtqEspessura')) l.espessuraBorda = Number(val('edEtqEspessura').value);
+      if (val('edEtqLote')) l.mostrarLote = val('edEtqLote').checked;
+      if (val('edEtqContatoVis')) l.mostrarContato = val('edEtqContatoVis').checked;
+      if (val('edEtqWhatsVis')) l.mostrarWhatsApp = val('edEtqWhatsVis').checked;
+      if (val('edEtqInstaVis')) l.mostrarInstagram = val('edEtqInstaVis').checked;
+      if (val('edEtqRaioVal')) val('edEtqRaioVal').textContent = l.raioBorda + ' px';
+      if (val('edEtqBordaVal')) val('edEtqBordaVal').textContent = l.espessuraBorda + ' px';
+      const stage = val('edEtqStage');
+      if (stage) {
+        const card = stage.querySelector('.label-card');
+        if (card) {
+          card.style.setProperty('--etq-editor-bg', l.fundo || '#fff');
+          card.style.setProperty('--etq-editor-text', l.corTexto || '#171717');
+          card.style.setProperty('--etq-editor-border', l.corBorda || '#171717');
+          card.style.setProperty('--etq-editor-accent', l.corDestaque || '#7a1f3d');
+          card.style.setProperty('--etq-editor-radius', (l.raioBorda ?? 12) + 'px');
+          card.style.setProperty('--etq-editor-border-width', (l.espessuraBorda ?? 2) + 'px');
+          card.style.setProperty('--etq-editor-title-font', "'" + (l.fonteTitulo || 'Fraunces') + "'");
+          const lote = card.querySelector('.label-lote'); if (lote) lote.style.display = l.mostrarLote ? '' : 'none';
+          const contato = card.querySelector('.label-contact-title'); if (contato) { contato.style.display = l.mostrarContato ? '' : 'none'; contato.textContent = l.textoContatoTitulo || ''; contato.style.display = (l.mostrarContato && !!l.textoContatoTitulo.trim()) ? '' : 'none'; }
+          const whats = card.querySelector('.label-contact-line'); if (whats) whats.style.display = l.mostrarWhatsApp ? '' : 'none';
+          const insta = card.querySelectorAll('.label-contact-line')[1]; if (insta) insta.style.display = l.mostrarInstagram ? '' : 'none';
+        }
+      }
+      if (persistirAgora) salvarEditorEtiqueta();
+    }
+
+    function salvarEditorEtiqueta() {
+      DB.etiquetaLayout = JSON.parse(JSON.stringify(window.ETQ_EDITOR_DRAFT || DB.etiquetaLayout || defaultEtiquetaLayout()));
+      delete window.ETQ_EDITOR_DRAFT;
+      persist('etiquetaLayout');
+      aplicarLayoutEtiquetaCSS();
+      const sheet = document.getElementById('labelsSheet');
+      if (sheet) sheet.innerHTML = renderLabelsSheetHtml();
+      fecharModalDirect();
+      toast('Design da etiqueta salvo!', 'ok');
     }
 
     function atualizarLayoutEtiqueta() {
