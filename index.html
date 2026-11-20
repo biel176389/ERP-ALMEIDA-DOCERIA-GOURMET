@@ -3681,12 +3681,15 @@ ${baseConfig.cuidados}
     return `<div style="margin-bottom:16px"><div class="pill-tabs" style="flex-wrap:wrap;gap:6px">${btns}</div>${custom}</div>`;
   }
   function vendasComissao(){
-    const {inicio,fim}=periodoComissao();
+    // O acerto é consolidado por vendedor e reúne todas as vendas ainda não quitadas,
+    // independentemente do período em que foram realizadas.
     const uidFiltro=window.__comissaoVendedor;
     return (DB.vendas||[]).filter(v=>{
-      const d=saleDate(v); const inPeriod=d>=inicio&&d<=fim;
-      const inUser=uidFiltro==='todos' || saleVendorUid(v)===uidFiltro;
-      return inPeriod&&inUser;
+      const uid=saleVendorUid(v);
+      const perfil=(window.__usersCache||[]).find(u=>u.uid===uid);
+      const ehVendedor=perfil ? perfil.role==='vendedor' : !!uid && saleCommissionRate(v)>0;
+      const inUser=uidFiltro==='todos' || uid===uidFiltro;
+      return ehVendedor&&inUser;
     });
   }
   function comissaoResumo(lista){
@@ -3702,16 +3705,29 @@ ${baseConfig.cuidados}
   }
   window.marcarAcertoRealizado = async function(){
     if(!isAdmin()) return toast('Somente o administrador pode quitar prestações.','err');
-    const lista=vendasComissao().filter(v=>(v.statusAcerto||'pendente')!=='quitado');
-    if(!lista.length) return toast('Não há vendas pendentes neste período.','err');
+    const vendedorUid=window.__comissaoVendedor;
+    if(!vendedorUid || vendedorUid==='todos') return toast('Selecione um vendedor para realizar o acerto.','err');
+    const lista=vendasComissao().filter(v=>(v.statusAcerto||'pendente')!=='quitado' && saleVendorUid(v)===vendedorUid);
+    if(!lista.length) return toast('Este vendedor não possui vendas pendentes de acerto.','err');
     const resumo=comissaoResumo(lista); const id=uid();
+    const vendedor=(window.__usersCache||[]).find(u=>u.uid===vendedorUid);
     try{
-      await window.setDoc(window.doc(window.db,'acertos',id),{id, vendedorUid:window.__comissaoVendedor, periodo:window.__comissaoFiltro,totalVendido:resumo.vendas,comissao:resumo.comissao,valorRepassar:resumo.repasse,vendaIds:lista.map(v=>v.id),realizadoPor:window.currentFirebaseUser?.uid||'',realizadoEm:window.serverTimestamp()});
-      lista.forEach(v=>{ v.statusAcerto='quitado'; v.acertoId=id; v.acertoData=nowISO(); });
+      const vendaIds=lista.map(v=>v.id);
+      // Grava primeiro o documento do acerto. Só depois marca as vendas como quitadas.
+      await window.setDoc(window.doc(window.db,'acertos',id),{
+        id, vendedorUid, vendedorEmail:vendedor?.email||lista[0]?.vendedorEmail||'',
+        tipo:'consolidado_vendedor', totalVendido:resumo.vendas,
+        comissao:resumo.comissao, valorRepassar:resumo.repasse,
+        quantidadeVendas:lista.length, vendaIds,
+        realizadoPor:window.currentFirebaseUser?.uid||'',
+        realizadoEm:window.serverTimestamp()
+      });
+      lista.forEach(v=>{ v.statusAcerto='quitado'; v.acertoId=id; v.acertoTipo='consolidado_vendedor'; v.acertoData=nowISO(); });
       await Promise.all(lista.map(v=>salvarVendaFirestore(v)));
       await saveKey('vendas',DB.vendas);
-      toast('Prestação de contas quitada e zerada para o período.','ok'); render();
-    }catch(e){toast('Erro ao quitar acerto: '+e.message,'err');}
+      window.__comissaoSel={};
+      toast('Acerto do vendedor registrado com sucesso!','ok'); render();
+    }catch(e){toast('Erro ao registrar acerto: '+e.message,'err');}
   };
   // Quita (ou desfaz a quitação de) UMA venda individual do extrato
   window.marcarVendaQuitada = async function(vendaId, quitar=true){
@@ -3953,16 +3969,61 @@ ${baseConfig.cuidados}
     persist('caixa'); fecharModalDirect(); render(); toast('Retirada registrada!','ok');
   };
   window.viewComissoes = function(){
-    let vendedores=[];
-    if(isAdmin()) vendedores=window.__usersCache.filter(u=>u.role==='vendedor');
-    const lista=vendasComissao(); const r=comissaoResumo(lista); const demo=isAdmin()?demonstrativoComissao(lista):''; const selN=vendasSelecionadasComissao().length; const pendN=lista.filter(v=>v.statusAcerto!=='quitado').length;
-    const seletor=isAdmin()?`<div class="field"><label>Vendedor</label><select class="input" onchange="window.__comissaoVendedor=this.value; window.__comissaoSel={}; render()"><option value="todos" ${window.__comissaoVendedor==='todos'?'selected':''}>Todos os vendedores</option>${vendedores.map(u=>`<option value="${esc(u.uid)}" ${window.__comissaoVendedor===u.uid?'selected':''}>${esc(u.email||u.uid)} · ${Number(u.comissaoPorcentagem??20)}%</option>`).join('')}</select></div>`:`<div class="help-note"><b>Comissão atual:</b> ${Number(window.currentUserComissao)}% · este painel mostra somente suas próprias vendas.</div>`;
-    const rows=lista.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{const t=saleTotal(v),c=saleCommission(v),rp=saleRepasse(v),item=v.itens?.[0]||{}; const p=findProduto(item.produtoId); return `<tr>${isAdmin()?`<td style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" class="chk-comissao" data-id="${esc(v.id)}" ${v.statusAcerto==='quitado'?'disabled':''} ${window.__comissaoSel[v.id]&&v.statusAcerto!=='quitado'?'checked':''} onchange="toggleSelComissao('${esc(v.id)}',this.checked)"></label></td>`:''}<td class="mono">${fmtDateTime(v.data)}</td><td>${esc(p?.nome||item.produtoId||'—')}</td><td>${item.qty||0}</td><td>${esc(v.localCanal||'—')}</td>${isAdmin()?`<td>${esc(v.vendedorEmail||'—')}</td>`:''}<td>${fmtMoney(t)}${isAdmin()?`<br><small class="mono" style="opacity:.65">custo ${fmtMoney(saleCost(v))}</small>`:''}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(c)}</td><td>${fmtMoney(rp)}</td><td>${v.statusAcerto==='quitado'?'<span class="badge badge-ok">Quitado</span>':'<span class="badge badge-warn">Pendente</span>'}</td>${isAdmin()?`<td style="text-align:right;white-space:nowrap">${v.statusAcerto==='quitado'?`<button class="btn btn-secondary btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',false)">Desfazer</button>`:`<button class="btn btn-gold btn-sm" onclick="marcarVendaQuitada('${esc(v.id)}',true)">✓ Quitar</button>`}</td>`:''}</tr>`}).join('');
-    return `${seletor}${filtroComissaoHtml()}
-      ${demo}
-      <div class="grid grid-3"><div class="card stat"><div class="label">Total Vendido</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">Pendente de acerto</div></div><div class="card stat"><div class="label">Comissão do Vendedor</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Ganhos no período</div></div><div class="card stat"><div class="label">Valor a Repassar</div><div class="value">${fmtMoney(r.repasse)}</div><div class="delta">Prestação de contas pendente</div></div></div>
-      ${isAdmin()?`<div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin:16px 0"><button id="btnTransfSel" class="btn btn-secondary" onclick="abrirTransferenciaVendas()">⇄ Transferir selecionadas (${selN})</button><button class="btn btn-gold" onclick="marcarAcertoRealizado()">✓ Marcar Acerto Realizado / Quitar Prestação</button></div>`:''}
-      <div class="card card-pad"><div class="section-title" style="margin-top:0"><h2>Extrato de Vendas</h2><span class="hint">${lista.length} lançamento(s) no período</span></div><div class="table-wrap"><table><thead><tr>${isAdmin()?`<th style="width:52px;padding:2px"><label class="chk-wrap"><input type="checkbox" id="chkTodasComissao" class="chk-comissao" title="Selecionar todas as pendentes" ${pendN>0&&selN===pendN?'checked':''} onchange="toggleSelTodasComissao(this.checked)"></label></th>`:''}<th>Data/Hora</th><th>Produto/Sabor</th><th>Qtd.</th><th>Local/Canal</th>${isAdmin()?'<th>Vendedor</th>':''}<th>Valor Total</th><th>% Comissão</th><th>Comissão R$</th><th>Repassar R$</th><th>Status</th>${isAdmin()?'<th style="text-align:right">Ação</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${isAdmin()?12:9}" class="empty">Nenhuma venda no período selecionado.</td></tr>`}</tbody></table></div></div>`;
+    const todosVendedores=(window.__usersCache||[]).filter(u=>u.role==='vendedor');
+    if(!isAdmin()){
+      const minhas=vendasComissao();
+      const r=comissaoResumo(minhas);
+      return `<div class="grid grid-2">
+        <div class="card stat"><div class="label">Minhas vendas pendentes</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">${r.quantidade} venda(s) aguardando acerto</div></div>
+        <div class="card stat"><div class="label">Minha comissão</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Percentual configurado: ${Number(window.currentUserComissao)||0}%</div></div>
+      </div><div class="help-note">O administrador realiza o fechamento e registra o acerto das vendas.</div>`;
+    }
+    const uidSelecionado=window.__comissaoVendedor||'todos';
+    const lista=vendasComissao();
+    const pendentes=lista.filter(v=>(v.statusAcerto||'pendente')!=='quitado');
+    const quitadas=lista.filter(v=>v.statusAcerto==='quitado');
+    const r=comissaoResumo(lista);
+    const nomeVendedor=todosVendedores.find(u=>u.uid===uidSelecionado);
+    const opcoes=todosVendedores.map(u=>`<option value="${esc(u.uid)}" ${uidSelecionado===u.uid?'selected':''}>${esc(u.email||u.fullName||u.uid)} · ${Number(u.comissaoPorcentagem??20)}%</option>`).join('');
+    const linhas=pendentes.slice().sort((a,b)=>saleDate(b)-saleDate(a)).map(v=>{
+      const item=v.itens?.[0]||{}, produto=findProduto(item.produtoId);
+      return `<tr><td class="mono">${fmtDateTime(v.data)}</td><td>${esc(produto?.nome||item.produtoId||'Produto')}</td><td>${Number(item.qty)||0}</td><td>${fmtMoney(saleTotal(v))}</td><td>${saleCommissionRate(v).toFixed(1)}%</td><td>${fmtMoney(saleCommission(v))}</td><td><b>${fmtMoney(saleRepasse(v))}</b></td></tr>`;
+    }).join('');
+    const podeAcertar=uidSelecionado!=='todos'&&pendentes.length>0;
+    return `
+      <div class="card card-pad" style="margin-bottom:16px">
+        <div class="section-title" style="margin-top:0"><h2>Resumo dos vendedores</h2><span class="hint">${todosVendedores.length} cadastrado(s)</span></div>
+        <div class="grid grid-2">
+          <div class="card stat"><div class="label">Total vendido pendente</div><div class="value">${fmtMoney(r.vendas)}</div><div class="delta">${r.quantidade} venda(s) sem acerto</div></div>
+          <div class="card stat"><div class="label">Comissões pendentes</div><div class="value">${fmtMoney(r.comissao)}</div><div class="delta">Valores dos vendedores</div></div>
+          <div class="card stat"><div class="label">A receber da equipe</div><div class="value">${fmtMoney(r.repasse)}</div><div class="delta">Após descontar as comissões</div></div>
+          <div class="card stat"><div class="label">Vendas já acertadas</div><div class="value">${quitadas.length}</div><div class="delta">Registros no histórico</div></div>
+        </div>
+      </div>
+      <div class="card card-pad" style="margin-bottom:16px">
+        <div class="field" style="margin-bottom:12px"><label>Selecionar vendedor</label>
+          <select class="input" onchange="window.__comissaoVendedor=this.value;render()">
+            <option value="todos" ${uidSelecionado==='todos'?'selected':''}>Todos os vendedores · visão geral</option>${opcoes}
+          </select>
+        </div>
+        ${uidSelecionado==='todos'?'<div class="help-note">Selecione um vendedor para visualizar suas vendas pendentes e realizar um único acerto consolidado.</div>':`
+          <div class="section-title" style="margin-top:8px"><h2>${esc(nomeVendedor?.fullName||nomeVendedor?.email||'Vendedor')}</h2><span class="hint">Comissão configurada: ${Number(nomeVendedor?.comissaoPorcentagem??20)}%</span></div>
+          <div class="grid grid-3">
+            <div class="card stat"><div class="label">Vendas pendentes</div><div class="value">${fmtMoney(r.vendas)}</div></div>
+            <div class="card stat"><div class="label">Comissão</div><div class="value">${fmtMoney(r.comissao)}</div></div>
+            <div class="card stat"><div class="label">Valor a repassar</div><div class="value">${fmtMoney(r.repasse)}</div></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-gold" onclick="marcarAcertoRealizado()" ${podeAcertar?'':'disabled'}>✓ Realizar acerto deste vendedor</button></div>
+        `}
+      </div>
+      <div class="card card-pad">
+        <div class="section-title" style="margin-top:0"><h2>Vendas aguardando acerto</h2><span class="hint">${pendentes.length} lançamento(s)</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Data</th><th>Produto</th><th>Qtd.</th><th>Total vendido</th><th>Comissão</th><th>Valor comissão</th><th>Repassar</th></tr></thead><tbody>${linhas||'<tr><td colspan="7" class="empty">Nenhuma venda pendente para este filtro.</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="card card-pad" style="margin-top:16px">
+        <div class="section-title" style="margin-top:0"><h2>Histórico de acertos</h2><span class="hint">${quitadas.length} venda(s) já quitada(s)</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Data da venda</th><th>Produto</th><th>Qtd.</th><th>Valor</th><th>Comissão</th><th>Acerto</th></tr></thead><tbody>${quitadas.slice().sort((a,b)=>new Date(b.acertoData||b.data)-new Date(a.acertoData||a.data)).map(v=>{const it=v.itens?.[0]||{},p=findProduto(it.produtoId);return `<tr><td>${fmtDateTime(v.acertoData||v.data)}</td><td>${esc(p?.nome||it.produtoId||'Produto')}</td><td>${Number(it.qty)||0}</td><td>${fmtMoney(saleTotal(v))}</td><td>${fmtMoney(saleCommission(v))}</td><td><span class="badge badge-ok">Quitado</span></td></tr>`;}).join('')||'<tr><td colspan="6" class="empty">Nenhum acerto realizado ainda.</td></tr>'}</tbody></table></div>
+      </div>`;
   };
 
   // ---------- Render central com bloqueio de rota e ações ----------
