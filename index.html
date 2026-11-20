@@ -2111,95 +2111,71 @@ ${baseConfig.cuidados}
     function viewCaixa() {
       const extrato = extratoCaixa();
       const saldoTotal = extrato.length ? extrato[extrato.length - 1].saldoAcumulado : (Number(DB.config && DB.config.saldoInicialCaixa) || 0);
-
       const minCx = extrato.reduce((m, l) => (l.data && (!m || l.data < m)) ? l.data : m, '');
       const days = periodDaysFiltro(PERIODO.caixa, minCx);
       const lblPer = periodoLabel(PERIODO.caixa, days);
       const startPeriodo = days[0];
       const endPeriodo = days[days.length - 1];
-      const saldoInicial = (Number(DB.config && DB.config.saldoInicialCaixa) || 0) + extrato.filter(l => l.data < startPeriodo).reduce((s, l) => s + (l.tipo === 'entrada' ? l.valor : -l.valor), 0);
-
-      const dayLabels = days.map(d => fmtDate(d).slice(0, 5));
-      const dayEntradas = days.map(d => extrato.filter(l => l.data === d && l.tipo === 'entrada').reduce((s, l) => s + l.valor, 0));
-      const daySaidas = days.map(d => extrato.filter(l => l.data === d && l.tipo === 'saida').reduce((s, l) => s + l.valor, 0));
-      const daySaldoAcumulado = [];
-      let acc = saldoInicial;
-      days.forEach((d, i) => { acc += dayEntradas[i] - daySaidas[i]; daySaldoAcumulado.push(acc); });
-
-      const entradasPeriodo = dayEntradas.reduce((a, b) => a + b, 0);
-      const saidasPeriodo = daySaidas.reduce((a, b) => a + b, 0);
-      const saldoPeriodo = entradasPeriodo - saidasPeriodo;
-      const temMovimentoPeriodo = dayEntradas.some(v => v > 0) || daySaidas.some(v => v > 0);
-
-      window.__caixa = { dayLabels, dayEntradas, daySaidas, daySaldoAcumulado };
-
       const linhasExtrato = extrato.filter(l => l.data >= startPeriodo && l.data <= endPeriodo).slice().reverse();
+      const entradasPeriodo = linhasExtrato.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor || 0), 0);
+      const saidasPeriodo = linhasExtrato.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor || 0), 0);
+      const saldoPeriodo = entradasPeriodo - saidasPeriodo;
+      const aguardando = DB.vendas.filter(v => window.vendaAguardandoAcerto && window.vendaAguardandoAcerto(v));
+      const aReceber = aguardando.reduce((t, v) => t + vendasFaturamento(v) - (window.saleCommission ? window.saleCommission(v) : 0), 0);
+      const avisoReceber = aguardando.length
+        ? `<div class="help-note caixa-receber"><b>A receber de vendedores:</b> ${fmtMoney(aReceber)} em ${aguardando.length} venda(s) aguardando acerto. O valor entra no caixa após a quitação em Comissões / Acertos.</div>`
+        : '';
       const rows = linhasExtrato.map(l => `
         <tr>
           <td><span class="mono">${fmtDate(l.data)}</span></td>
           <td>${l.tipo === 'entrada' ? '<span class="badge badge-ok">Entrada</span>' : '<span class="badge badge-danger">Saída</span>'}</td>
-          <td>${esc(l.categoria)}</td>
-          <td>${esc(l.descricao || '—')}</td>
-          <td style="text-align:right;"><b>${l.tipo === 'entrada' ? '+ ' : '- '}${fmtMoney(l.valor)}</b></td>
-          <td style="text-align:right;" class="mono">${fmtMoney(l.saldoAcumulado)}</td>
-          <td style="text-align:right;">
-            ${l.origem === 'manual'
-              ? `<button class="icon-btn" onclick="modalCaixa('${l.id}')">✏️ Edit</button><button class="icon-btn" onclick="deletarCaixa('${l.id}')">🗑️</button>`
-              : (l.origem === 'comissao' ? '<span class="badge badge-muted">Acerto</span>' : '<span class="badge badge-muted">Venda</span>')}
-          </td>
+          <td><b>${esc(l.categoria)}</b><small class="caixa-descricao">${esc(l.descricao || '—')}</small></td>
+          <td class="caixa-valor ${l.tipo === 'entrada' ? 'positivo' : 'negativo'}">${l.tipo === 'entrada' ? '+ ' : '− '}${fmtMoney(l.valor)}</td>
+          <td class="mono caixa-saldo">${fmtMoney(l.saldoAcumulado)}</td>
+          <td class="caixa-acoes">${l.origem === 'manual'
+            ? `<button class="icon-btn" onclick="modalCaixa('${l.id}')" aria-label="Editar lançamento">Editar</button><button class="icon-btn" onclick="deletarCaixa('${l.id}')" aria-label="Excluir lançamento">Excluir</button>`
+            : (l.origem === 'comissao' ? '<span class="badge badge-muted">Acerto</span>' : '<span class="badge badge-muted">Venda</span>')}</td>
         </tr>
       `).join('');
-
-      const aguardando = DB.vendas.filter(v => window.vendaAguardandoAcerto && window.vendaAguardandoAcerto(v));
-      const aReceber = aguardando.reduce((t, v) => t + vendasFaturamento(v) - (window.saleCommission ? window.saleCommission(v) : 0), 0);
-      const avisoReceber = aguardando.length
-        ? `<div class="help-note"><b>A receber de vendedores:</b> ${fmtMoney(aReceber)} em ${aguardando.length} venda(s) aguardando acerto. Esse valor entra no caixa quando a venda for quitada em Comissões / Acertos.</div>`
-        : '';
-
       return `
-      ${avisoReceber}
-      <div class="grid grid-4">
-        <div class="card stat"><div class="label">Saldo atual</div><div class="value">${fmtMoney(saldoTotal)}</div><div class="delta">acumulado de todo o histórico</div></div>
-        <div class="card stat"><div class="label">Entradas (período)</div><div class="value">${fmtMoney(entradasPeriodo)}</div><div class="delta">${lblPer}</div></div>
-        <div class="card stat"><div class="label">Saídas (período)</div><div class="value">${fmtMoney(saidasPeriodo)}</div><div class="delta">${lblPer}</div></div>
-        <div class="card stat"><div class="label">Saldo do período</div><div class="value">${fmtMoney(saldoPeriodo)}</div><div class="delta ${saldoPeriodo < 0 ? 'down' : ''}">${saldoPeriodo >= 0 ? 'positivo' : 'negativo'}</div></div>
-      </div>
-
-      ${window.cardLucroCapital ? window.cardLucroCapital() : ''}
-
-      <div class="card card-pad" style="margin-top:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-          <h3 style="font-size:15px;margin:0;">Saldo acumulado — ${lblPer}</h3>
-          ${filtroPeriodoHtml('caixa')}
+        <style>
+          .caixa-resumo{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(2,minmax(0,1fr));gap:12px;margin:0 0 18px}
+          .caixa-resumo .card{padding:20px 22px;border:1px solid var(--border,#e8e1dc);box-shadow:none}
+          .caixa-saldo-principal{background:var(--card,#fff);}
+          .caixa-saldo-principal .value{font-size:clamp(26px,4vw,34px);font-weight:750;letter-spacing:-1px;margin-top:8px}
+          .caixa-resumo .value{font-size:clamp(19px,3vw,25px);font-weight:700;margin-top:9px}
+          .caixa-resumo .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.7}
+          .caixa-periodo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px}
+          .caixa-periodo h3{margin:0;font-size:16px}
+          .caixa-extrato{border:1px solid var(--border,#e8e1dc);border-radius:14px;background:var(--card,#fff);overflow:hidden}
+          .caixa-extrato-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:17px 20px;border-bottom:1px solid var(--border,#e8e1dc)}
+          .caixa-extrato-head h3{margin:0;font-size:16px}
+          .caixa-extrato .table-wrap{border:0;border-radius:0}
+          .caixa-extrato table{min-width:650px}
+          .caixa-descricao{display:block;margin-top:3px;opacity:.65;font-weight:400}
+          .caixa-valor{text-align:right;font-weight:700;white-space:nowrap}
+          .caixa-valor.positivo{color:#28764b}.caixa-valor.negativo{color:#b34b42}
+          .caixa-saldo{text-align:right;white-space:nowrap}
+          .caixa-acoes{text-align:right;white-space:nowrap}
+          .caixa-acoes .icon-btn{margin-left:4px}
+          @media(max-width:700px){.caixa-resumo{grid-template-columns:1fr 1fr}.caixa-saldo-principal{grid-column:1/-1}.caixa-resumo .card{padding:16px}.caixa-extrato-head{padding:14px}}
+        </style>
+        ${avisoReceber}
+        <div class="caixa-resumo">
+          <div class="card stat caixa-saldo-principal"><div class="label">Saldo disponível</div><div class="value">${fmtMoney(saldoTotal)}</div><div class="delta">Saldo acumulado de todo o histórico</div></div>
+          <div class="card stat"><div class="label">Entradas</div><div class="value" style="color:#28764b">${fmtMoney(entradasPeriodo)}</div><div class="delta">${lblPer}</div></div>
+          <div class="card stat"><div class="label">Saídas</div><div class="value" style="color:#b34b42">${fmtMoney(saidasPeriodo)}</div><div class="delta">${lblPer}</div></div>
         </div>
-        <div class="chart-wrap"><canvas id="chartCaixaSaldo"></canvas></div>
-      </div>
-
-      <div class="card card-pad" style="margin-top:16px;">
-        <h3 style="font-size:15px;margin-bottom:12px;">Entradas x Saídas — ${lblPer}</h3>
-        <div class="chart-wrap">${temMovimentoPeriodo ? '<canvas id="chartCaixaFluxo"></canvas>' : emptyBlock('Sem movimentações no período', 'Registre vendas ou lançamentos para ver o gráfico.')}</div>
-      </div>
-
-      <div class="card card-pad" style="margin-top:16px;">
-        <h3 style="font-size:15px;margin-bottom:12px;">Extrato (${lblPer})</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th>
-                <th style="text-align:right;">Valor</th><th style="text-align:right;">Saldo</th>
-                <th style="text-align:right;">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.length ? rows : '<tr><td colspan="7" class="empty">Nenhuma movimentação no período.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <div class="caixa-periodo"><h3>Movimentações</h3>${filtroPeriodoHtml('caixa')}</div>
+        <section class="caixa-extrato">
+          <div class="caixa-extrato-head"><h3>Extrato do caixa</h3><span class="hint">${linhasExtrato.length} lançamento(s) · Saldo do período: <b>${fmtMoney(saldoPeriodo)}</b></span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Data</th><th>Tipo</th><th>Categoria / descrição</th><th style="text-align:right">Valor</th><th style="text-align:right">Saldo após lançamento</th><th style="text-align:right">Ações</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="empty">Nenhuma movimentação no período selecionado.</td></tr>'}</tbody>
+          </table></div>
+        </section>
       `;
     }
-
     function renderCaixaCharts() {
       const dash = window.__caixa;
       if (!dash) return;
@@ -3963,7 +3939,7 @@ ${baseConfig.cuidados}
     else if(ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
     else if(ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
     else if(ROUTE==='vendas'){ if(isAdmin()||isSeller()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`; c.innerHTML=window.viewVendas(); }
-    else if(ROUTE==='caixa'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`; c.innerHTML=window.viewCaixa(); if(window.renderCaixaCharts) window.renderCaixaCharts(); }
+    else if(ROUTE==='caixa'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`; c.innerHTML=window.viewCaixa(); }
     else if(ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
     else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
     else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
