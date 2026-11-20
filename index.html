@@ -2120,61 +2120,97 @@ ${baseConfig.cuidados}
       const linhasExtrato = extrato.filter(l => l.data >= startPeriodo && l.data <= endPeriodo).slice().reverse();
       const entradasPeriodo = linhasExtrato.filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor || 0), 0);
       const saidasPeriodo = linhasExtrato.filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor || 0), 0);
-      const saldoPeriodo = entradasPeriodo - saidasPeriodo;
       const aguardando = DB.vendas.filter(v => window.vendaAguardandoAcerto && window.vendaAguardandoAcerto(v));
       const aReceber = aguardando.reduce((t, v) => t + vendasFaturamento(v) - (window.saleCommission ? window.saleCommission(v) : 0), 0);
       const avisoReceber = aguardando.length
         ? `<div class="help-note caixa-receber"><b>A receber de vendedores:</b> ${fmtMoney(aReceber)} em ${aguardando.length} venda(s) aguardando acerto. O valor entra no caixa após a quitação em Comissões / Acertos.</div>`
         : '';
-      const rows = linhasExtrato.map(l => `
-        <tr>
-          <td><span class="mono">${fmtDate(l.data)}</span></td>
-          <td>${l.tipo === 'entrada' ? '<span class="badge badge-ok">Entrada</span>' : '<span class="badge badge-danger">Saída</span>'}</td>
-          <td><b>${esc(l.categoria)}</b><small class="caixa-descricao">${esc(l.descricao || '—')}</small></td>
-          <td class="caixa-valor ${l.tipo === 'entrada' ? 'positivo' : 'negativo'}">${l.tipo === 'entrada' ? '+ ' : '− '}${fmtMoney(l.valor)}</td>
-          <td class="mono caixa-saldo">${fmtMoney(l.saldoAcumulado)}</td>
-          <td class="caixa-acoes">${l.origem === 'manual'
-            ? `<button class="icon-btn" onclick="modalCaixa('${l.id}')" aria-label="Editar lançamento">Editar</button><button class="icon-btn" onclick="deletarCaixa('${l.id}')" aria-label="Excluir lançamento">Excluir</button>`
-            : (l.origem === 'comissao' ? '<span class="badge badge-muted">Acerto</span>' : '<span class="badge badge-muted">Venda</span>')}</td>
-        </tr>
-      `).join('');
+      const mesVisao = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      const rows = linhasExtrato.map(l => {
+        const titulo = l.origem === 'venda' ? 'Venda de produtos' : (l.origem === 'comissao' ? 'Comissão de vendedores' : (l.categoria || 'Lançamento'));
+        const tipoTexto = l.origem === 'venda' ? 'Venda automática' : (l.origem === 'comissao' ? 'Acerto de comissão' : (l.tipo === 'saida' ? 'Despesa' : 'Receita'));
+        const descricao = l.origem === 'manual' && l.descricao ? ' · ' + esc(l.descricao) : '';
+        const acoes = l.origem === 'manual'
+          ? `<span class="caixa-item-acoes"><button type="button" onclick="modalCaixa('${esc(l.id)}')">Editar</button><button type="button" onclick="deletarCaixa('${esc(l.id)}')">Excluir</button></span>`
+          : '';
+        return `
+          <article class="caixa-movimento">
+            <div class="caixa-movimento-info">
+              <strong>${esc(titulo)}</strong>
+              <div class="caixa-movimento-meta">${fmtDate(l.data).slice(0,5)} · ${tipoTexto}${descricao}</div>
+              ${acoes}
+            </div>
+            <div class="caixa-movimento-valor ${l.tipo === 'entrada' ? 'positivo' : 'negativo'}">${l.tipo === 'entrada' ? '+ ' : '− '}${fmtMoney(l.valor)}</div>
+          </article>`;
+      }).join('');
       return `
         <style>
-          .caixa-resumo{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(2,minmax(0,1fr));gap:12px;margin:0 0 18px}
-          .caixa-resumo .card{padding:20px 22px;border:1px solid var(--border,#e8e1dc);box-shadow:none}
-          .caixa-saldo-principal{background:var(--card,#fff);}
-          .caixa-saldo-principal .value{font-size:clamp(26px,4vw,34px);font-weight:750;letter-spacing:-1px;margin-top:8px}
-          .caixa-resumo .value{font-size:clamp(19px,3vw,25px);font-weight:700;margin-top:9px}
-          .caixa-resumo .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.7}
-          .caixa-periodo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px}
-          .caixa-periodo h3{margin:0;font-size:16px}
-          .caixa-extrato{border:1px solid var(--border,#e8e1dc);border-radius:14px;background:var(--card,#fff);overflow:hidden}
-          .caixa-extrato-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:17px 20px;border-bottom:1px solid var(--border,#e8e1dc)}
-          .caixa-extrato-head h3{margin:0;font-size:16px}
-          .caixa-extrato .table-wrap{border:0;border-radius:0}
-          .caixa-extrato table{min-width:650px}
-          .caixa-descricao{display:block;margin-top:3px;opacity:.65;font-weight:400}
-          .caixa-valor{text-align:right;font-weight:700;white-space:nowrap}
-          .caixa-valor.positivo{color:#28764b}.caixa-valor.negativo{color:#b34b42}
-          .caixa-saldo{text-align:right;white-space:nowrap}
-          .caixa-acoes{text-align:right;white-space:nowrap}
-          .caixa-acoes .icon-btn{margin-left:4px}
-          @media(max-width:700px){.caixa-resumo{grid-template-columns:1fr 1fr}.caixa-saldo-principal{grid-column:1/-1}.caixa-resumo .card{padding:16px}.caixa-extrato-head{padding:14px}}
+          .caixa-novo-conceito{color:var(--text,#f5f6f7);width:100%;max-width:100%}
+          .caixa-visao{font-size:12px;letter-spacing:.035em;text-transform:uppercase;color:var(--muted,#aeb4ba);margin:2px 0 12px}
+          .caixa-painel{background:#24292e;border:1px solid rgba(255,255,255,.045);border-radius:17px;padding:17px 20px 16px;margin:0 0 17px;box-shadow:none}
+          .caixa-painel-label{font-size:12px;text-transform:uppercase;letter-spacing:.035em;color:#d1d6da}
+          .caixa-painel-saldo{font-family:Georgia,serif;font-size:clamp(27px,4vw,34px);font-weight:700;letter-spacing:.01em;color:#fff;margin-top:8px}
+          .caixa-painel-divisor{height:1px;background:rgba(255,255,255,.16);margin:16px 0}
+          .caixa-painel-indicadores{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+          .caixa-indicador-label{font-size:12px;text-transform:uppercase;letter-spacing:.025em;margin-bottom:8px}
+          .caixa-indicador-label.entrada{color:#8ce3a9}.caixa-indicador-label.saida{color:#ff9b8f}
+          .caixa-indicador-valor{font-size:clamp(18px,2.8vw,22px);font-weight:650}
+          .caixa-indicador-valor.entrada{color:#8ce3a9}.caixa-indicador-valor.saida{color:#ff9b8f}
+          .caixa-movimentos-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 4px}
+          .caixa-movimentos-topo h3{font-size:16px;margin:0;font-weight:700;color:var(--text,#f5f6f7)}
+          .caixa-filtro details{position:relative}
+          .caixa-filtro summary{cursor:pointer;list-style:none;color:var(--accent,#d9b18c);font-size:12px;white-space:nowrap}
+          .caixa-filtro summary::-webkit-details-marker{display:none}
+          .caixa-filtro summary:after{content:'⌄';margin-left:5px}
+          .caixa-filtro details[open] .caixa-filtro-opcoes{position:absolute;right:0;top:24px;z-index:5;min-width:min(92vw,390px);padding:12px;background:var(--card,#24292e);border:1px solid var(--border,rgba(255,255,255,.14));border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.28)}
+          .caixa-filtro .pill-tabs{display:flex;flex-wrap:wrap;gap:6px}
+          .caixa-filtro .pill-tab{font-size:11px;padding:6px 9px}
+          .caixa-filtro .input{font-size:12px}
+          .caixa-lista{width:100%}
+          .caixa-movimento{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 0;border-bottom:1px solid var(--border,rgba(255,255,255,.10))}
+          .caixa-movimento:last-child{border-bottom:0}
+          .caixa-movimento-info{min-width:0;flex:1}
+          .caixa-movimento-info strong{display:block;font-size:15px;font-weight:650;color:var(--text,#f5f6f7);line-height:1.35}
+          .caixa-movimento-meta{font-size:11px;color:var(--muted,#aeb4ba);margin-top:3px;line-height:1.45;overflow-wrap:anywhere}
+          .caixa-movimento-valor{font-size:15px;font-weight:650;white-space:nowrap;text-align:right}
+          .caixa-movimento-valor.positivo{color:#00c878}.caixa-movimento-valor.negativo{color:#ff594d}
+          .caixa-item-acoes{display:flex;gap:10px;margin-top:5px}
+          .caixa-item-acoes button{border:0;padding:0;background:none;color:var(--muted,#aeb4ba);font-size:10px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+          .caixa-vazio{padding:25px 0;color:var(--muted,#aeb4ba);font-size:13px;text-align:center}
+          @media(max-width:600px){
+            .caixa-painel{padding:16px;border-radius:15px}
+            .caixa-movimento{padding:15px 0;gap:10px}
+            .caixa-movimento-info strong{font-size:14px}
+            .caixa-movimento-valor{font-size:14px}
+            .caixa-filtro details[open] .caixa-filtro-opcoes{right:-4px}
+          }
         </style>
-        ${avisoReceber}
-        <div class="caixa-resumo">
-          <div class="card stat caixa-saldo-principal"><div class="label">Saldo disponível</div><div class="value">${fmtMoney(saldoTotal)}</div><div class="delta">Saldo acumulado de todo o histórico</div></div>
-          <div class="card stat"><div class="label">Entradas</div><div class="value" style="color:#28764b">${fmtMoney(entradasPeriodo)}</div><div class="delta">${lblPer}</div></div>
-          <div class="card stat"><div class="label">Saídas</div><div class="value" style="color:#b34b42">${fmtMoney(saidasPeriodo)}</div><div class="delta">${lblPer}</div></div>
+        <div class="caixa-novo-conceito">
+          ${avisoReceber}
+          <div class="caixa-visao">Visão financeira · ${mesVisao}</div>
+          <section class="caixa-painel" aria-label="Resumo financeiro">
+            <div class="caixa-painel-label">Saldo disponível</div>
+            <div class="caixa-painel-saldo">${fmtMoney(saldoTotal)}</div>
+            <div class="caixa-painel-divisor"></div>
+            <div class="caixa-painel-indicadores">
+              <div>
+                <div class="caixa-indicador-label entrada">↑ Entradas</div>
+                <div class="caixa-indicador-valor entrada">${fmtMoney(entradasPeriodo)}</div>
+              </div>
+              <div>
+                <div class="caixa-indicador-label saida">↓ Saídas</div>
+                <div class="caixa-indicador-valor saida">${fmtMoney(saidasPeriodo)}</div>
+              </div>
+            </div>
+          </section>
+          <div class="caixa-movimentos-topo">
+            <h3>Movimentações</h3>
+            <div class="caixa-filtro"><details><summary>Ver período</summary><div class="caixa-filtro-opcoes">${filtroPeriodoHtml('caixa')}<div style="font-size:10px;color:var(--muted,#aeb4ba);margin-top:8px;text-align:right">${lblPer}</div></div></details></div>
+          </div>
+          <section class="caixa-lista" aria-label="Movimentações do caixa">
+            ${rows || '<div class="caixa-vazio">Nenhuma movimentação no período selecionado.</div>'}
+          </section>
         </div>
-        <div class="caixa-periodo"><h3>Movimentações</h3>${filtroPeriodoHtml('caixa')}</div>
-        <section class="caixa-extrato">
-          <div class="caixa-extrato-head"><h3>Extrato do caixa</h3><span class="hint">${linhasExtrato.length} lançamento(s) · Saldo do período: <b>${fmtMoney(saldoPeriodo)}</b></span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Data</th><th>Tipo</th><th>Categoria / descrição</th><th style="text-align:right">Valor</th><th style="text-align:right">Saldo após lançamento</th><th style="text-align:right">Ações</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="empty">Nenhuma movimentação no período selecionado.</td></tr>'}</tbody>
-          </table></div>
-        </section>
       `;
     }
     function renderCaixaCharts() {
