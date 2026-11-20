@@ -794,6 +794,8 @@ ${baseConfig.cuidados}
       const restritoVendedor = ['config', 'insumos', 'producoes', 'caixa', 'etiquetaLayout'];
       const restritoViewer = ['caixa', 'vendas'];
 
+      // Cache local continua disponível apenas para telas restritas desses perfis.
+      // Para administrador/liderança, o Firestore é a fonte oficial, inclusive quando vazio.
       if ((isSeller && restritoVendedor.includes(key)) || (isViewer && restritoViewer.includes(key))) {
         try {
           const local = localStorage.getItem('docemg_' + key);
@@ -808,17 +810,16 @@ ${baseConfig.cuidados}
           localStorage.setItem('docemg_' + key, JSON.stringify(dados));
           return dados;
         }
-        const local = localStorage.getItem('docemg_' + key);
-        return local != null ? JSON.parse(local) : fallback;
+
+        // Documento ausente ou sem dados: não ressuscitar cópia antiga do navegador.
+        localStorage.removeItem('docemg_' + key);
+        return fallback;
       } catch (e) {
-        const msg = String(e?.code || e?.message || '');
-        const isPermission = /permission|insufficient|denied/i.test(msg);
-        if (!isPermission) {
-          console.error('Erro ao carregar', key, e);
-          toast('Erro ao carregar ' + key + ': ' + msg, 'err');
-        }
-        const local = localStorage.getItem('docemg_' + key);
-        return local != null ? JSON.parse(local) : fallback;
+        const msg = String(e?.code || e?.message || 'Erro desconhecido');
+        console.error('Falha ao consultar Firestore para', key, e);
+        toast('Não foi possível carregar ' + key + ' do banco. Verifique sua conexão/permissões.', 'err');
+        // Falha de leitura não é banco vazio. Interrompe o carregamento em vez de usar dados antigos.
+        throw e;
       }
     }
 
@@ -3357,7 +3358,10 @@ ${baseConfig.cuidados}
   async function carregarVendasRBAC(){
     const role = window.currentUserRole;
     const user = window.currentFirebaseUser;
-    if (!user || !window.getDocs || !window.collection) return await loadKey('vendas', []);
+
+    // Sem sessão/SDK não é seguro montar o caixa com vendas antigas em cache.
+    if (!user || !window.getDocs || !window.collection) return [];
+
     try {
       const col = window.collection(window.db, 'vendas');
       let snap;
@@ -3367,17 +3371,18 @@ ${baseConfig.cuidados}
       } else {
         snap = await window.getDocs(col);
       }
+
       const vendas = [];
       snap.forEach(d => vendas.push({id:d.id, ...d.data()}));
-      if (!vendas.length && role !== ROLES.VENDEDOR) {
-        return await loadKey('vendas', []);
-      }
+
+      // Uma consulta válida sem documentos significa lista vazia. Nunca buscar vendas antigas
+      // no documento legado erp_data/vendas ou no localStorage.
       localStorage.setItem('docemg_vendas', JSON.stringify(vendas));
       return vendas;
     } catch(e){
-      console.warn('Coleção vendas individual indisponível:', e);
-      const antigas = await loadKey('vendas', []);
-      return role === ROLES.VENDEDOR ? antigas.filter(v => !v.vendedorUid || v.vendedorUid === user.uid) : antigas;
+      console.error('Falha ao carregar vendas do Firestore:', e);
+      // Não usar cache como fallback: isso poderia reintroduzir vendas já apagadas.
+      throw e;
     }
   }
 
