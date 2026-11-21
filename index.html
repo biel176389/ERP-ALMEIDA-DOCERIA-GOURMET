@@ -1756,7 +1756,7 @@ ${baseConfig.cuidados}
       }, 0);
 
       const data = String(dataFabricacao || todayISO()).replace(/-/g, '').slice(2);
-      if (!/^\\d{6}$/.test(data)) throw new Error('Data de fabricação inválida para gerar o lote.');
+      if (!/^\d{6}$/.test(data)) throw new Error('Data de fabricação inválida para gerar o lote.');
 
       const contadorRef = window.doc(window.db, 'erp_data', 'contador_lotes_receitas');
       const sequencia = await window.runTransaction(window.db, async (transaction) => {
