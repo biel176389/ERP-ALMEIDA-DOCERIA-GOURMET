@@ -1066,7 +1066,6 @@ ${baseConfig.cuidados}
       actions.innerHTML = '';
 
       if (ROUTE === 'dashboard') {
-        actions.innerHTML = `<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas','caixa'); toast('Dados sincronizados com sucesso!', 'ok');">💾 Salvar informações</button>`;
         c.innerHTML = viewDashboard();
         renderDashCharts();
       } 
@@ -4107,7 +4106,7 @@ ${baseConfig.cuidados}
     const title=titles[ROUTE]||['ERP',''];
     document.getElementById('pageTitle').textContent=title[0]; document.getElementById('pageSub').textContent=title[1];
     const c=document.getElementById('content'), actions=document.getElementById('topbarActions'); actions.innerHTML='';
-    if(ROUTE==='dashboard'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="persist('config','insumos','produtos','producoes','vendas','caixa');toast('Dados sincronizados com sucesso!','ok')">💾 Salvar informações</button>`; c.innerHTML=window.viewDashboard(); if(isAdmin()&&window.renderDashCharts) window.renderDashCharts(); }
+    if(ROUTE==='dashboard'){ c.innerHTML=window.viewDashboard(); if(isAdmin()&&window.renderDashCharts) window.renderDashCharts(); }
     else if(ROUTE==='estoque'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`; c.innerHTML=window.viewEstoque(); }
     else if(ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
     else if(ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
