@@ -28,7 +28,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, getDocs, query, where, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, getDocs, query, where, updateDoc, deleteDoc, runTransaction } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
 const firebaseConfig = {
@@ -57,6 +57,7 @@ window.query = query;
 window.where = where;
 window.updateDoc = updateDoc;
 window.deleteDoc = deleteDoc;
+window.runTransaction = runTransaction;
 
 window.fazerLogin = async (email, senha) => await signInWithEmailAndPassword(auth, email, senha);
 window.fazerCadastro = async (email, senha) => await createUserWithEmailAndPassword(auth, email, senha);
@@ -1743,7 +1744,36 @@ ${baseConfig.cuidados}
       document.getElementById('modalRoot').innerHTML = content;
     }
 
-    function salvarProducao(id = '') {
+    async function gerarProximoLote(dataFabricacao) {
+      if (!window.db || !window.doc || !window.runTransaction) {
+        throw new Error('Firebase não está disponível para gerar um lote seguro.');
+      }
+
+      // Recupera o maior número já utilizado no histórico, caso o contador ainda não exista.
+      const maiorHistorico = (DB.producoes || []).reduce((maior, p) => {
+        const match = String(p.lote || '').match(/^L\\d{6}(\\d+)$/);
+        return match ? Math.max(maior, Number(match[1]) || 0) : maior;
+      }, 0);
+
+      const data = String(dataFabricacao || todayISO()).replace(/-/g, '').slice(2);
+      if (!/^\\d{6}$/.test(data)) throw new Error('Data de fabricação inválida para gerar o lote.');
+
+      const contadorRef = window.doc(window.db, 'erp_counters', 'receitas');
+      const sequencia = await window.runTransaction(window.db, async (transaction) => {
+        const snapshot = await transaction.get(contadorRef);
+        const atualFirebase = snapshot.exists() ? Number(snapshot.data().ultimoNumero) || 0 : 0;
+        const proximo = Math.max(atualFirebase, maiorHistorico) + 1;
+        transaction.set(contadorRef, {
+          ultimoNumero: proximo,
+          atualizadoEm: window.serverTimestamp ? window.serverTimestamp() : new Date().toISOString()
+        }, { merge: true });
+        return proximo;
+      });
+
+      return { lote: 'L' + data + String(sequencia).padStart(2, '0'), sequencia };
+    }
+
+    async function salvarProducao(id = '') {
       const produtoId = document.getElementById('prodProdutoId').value;
       const qtdRaw = document.getElementById('prodQtd').value;
       const qtd = qtdRaw === '' ? NaN : Number(qtdRaw);
@@ -1806,7 +1836,17 @@ ${baseConfig.cuidados}
           prod.dataValidade = dataVal;
         }
       } else {
-        const lote = 'L' + Date.now().toString().slice(-6);
+        const botaoConfirmar = document.querySelector('#modalRoot .modal-foot .btn-primary');
+        if (botaoConfirmar) { botaoConfirmar.disabled = true; botaoConfirmar.textContent = 'Gerando lote...'; }
+        let loteGerado;
+        try {
+          loteGerado = await gerarProximoLote(dataFab);
+        } catch (erro) {
+          console.error('Falha ao gerar número do lote:', erro);
+          if (botaoConfirmar) { botaoConfirmar.disabled = false; botaoConfirmar.textContent = 'Confirmar Produção'; }
+          return toast('Não foi possível gerar o lote. Verifique sua conexão e tente novamente.', 'err');
+        }
+        const lote = loteGerado.lote;
         const itens = [];
         for (let i = 1; i <= qtd; i++) {
           itens.push({
@@ -1822,6 +1862,7 @@ ${baseConfig.cuidados}
         DB.producoes.push({
           id: uid(),
           lote,
+          sequenciaReceita: loteGerado.sequencia,
           produtoId,
           quantidade: qtd,
           dataFabricacao: dataFab,
@@ -1833,7 +1874,7 @@ ${baseConfig.cuidados}
       persist('produtos', 'producoes', 'insumos');
       fecharModalDirect();
       render();
-      toast(id ? 'Produção atualizada com sucesso!' : 'Lote produzido com sucesso!', 'ok');
+      toast(id ? 'Produção atualizada com sucesso!' : 'Lote ' + (DB.producoes[DB.producoes.length - 1]?.lote || '') + ' produzido com sucesso!', 'ok');
     }
 
     function deletarProducao(id) {
