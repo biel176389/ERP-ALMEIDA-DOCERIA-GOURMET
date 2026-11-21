@@ -1751,14 +1751,14 @@ ${baseConfig.cuidados}
 
       // Recupera o maior número já utilizado no histórico, caso o contador ainda não exista.
       const maiorHistorico = (DB.producoes || []).reduce((maior, p) => {
-        const match = String(p.lote || '').match(/^L\\d{6}(\\d+)$/);
+        const match = String(p.lote || '').match(/^L\d{6}(\d+)$/);
         return match ? Math.max(maior, Number(match[1]) || 0) : maior;
       }, 0);
 
       const data = String(dataFabricacao || todayISO()).replace(/-/g, '').slice(2);
       if (!/^\\d{6}$/.test(data)) throw new Error('Data de fabricação inválida para gerar o lote.');
 
-      const contadorRef = window.doc(window.db, 'erp_counters', 'receitas');
+      const contadorRef = window.doc(window.db, 'erp_data', 'contador_lotes_receitas');
       const sequencia = await window.runTransaction(window.db, async (transaction) => {
         const snapshot = await transaction.get(contadorRef);
         const atualFirebase = snapshot.exists() ? Number(snapshot.data().ultimoNumero) || 0 : 0;
