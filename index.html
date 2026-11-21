@@ -228,7 +228,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     padding: 9px 24px; background: var(--surface);
     border-bottom: 1px solid var(--line); overflow-x: auto;
     -webkit-overflow-scrolling: touch; scrollbar-width: thin;
-    position: sticky; top: 75px; z-index: 18;
+    position: sticky; top: 0; z-index: 30;
   }
   .top-nav button {
     flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
@@ -283,7 +283,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   .topbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 18px 28px; border-bottom: 1px solid var(--line);
-    background: var(--surface); position: sticky; top: 0; z-index: 20;
+    background: var(--surface); position: relative; z-index: 10;
     padding-top: max(18px, env(safe-area-inset-top));
   }
   .topbar h1 { font-size: 22px; }
@@ -634,6 +634,7 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     </nav>
     <div class="mobile-nav" id="mobileNav"></div>
     <div class="main">
+      <nav class="top-nav" id="topNav" aria-label="Navegação principal"></nav>
       <div class="topbar">
         <div style="min-width:0">
           <h1 id="pageTitle">Painel</h1>
@@ -641,7 +642,6 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
         </div>
         <div id="topbarActions"></div>
       </div>
-      <nav class="top-nav" id="topNav" aria-label="Navegação principal"></nav>
       <div class="content" id="content"></div>
     </div>
   </div>
