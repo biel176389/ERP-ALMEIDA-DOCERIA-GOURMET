@@ -221,11 +221,39 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   .login-btn-google:hover { background: var(--surface-2); }
 
   #app { display: none; min-height: 100dvh; }
-  .sidebar {
-    width: 220px; flex-shrink: 0; background: var(--wine-dark); color: #F5EDE3;
-    display: flex; flex-direction: column; padding: 20px 0;
-    position: sticky; top: 0; height: 100vh;
+  /* Navegação principal em menu suspenso */
+  .sidebar, .mobile-nav { display: none !important; }
+  #app { display: none; min-height: 100dvh; }
+  .nav-dropdown-wrap { position: relative; flex-shrink: 0; }
+  .btn-nav-dropdown {
+    display: inline-flex; align-items: center; gap: 9px; min-height: 40px;
+    padding: 0 13px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink); font: 700 13px 'Manrope', sans-serif;
+    cursor: pointer; transition: background .15s, border-color .15s;
   }
+  .btn-nav-dropdown:hover, .btn-nav-dropdown[aria-expanded="true"] { background: var(--surface-2); border-color: var(--wine); }
+  .btn-nav-dropdown svg { width: 17px; height: 17px; }
+  .nav-dropdown-panel {
+    display: none; position: absolute; z-index: 60; top: calc(100% + 9px); left: 0;
+    width: min(290px, calc(100vw - 28px)); max-height: min(70vh, 520px); overflow-y: auto;
+    padding: 8px; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--surface); box-shadow: 0 14px 38px rgba(30,20,20,.18);
+  }
+  .nav-dropdown-wrap.open .nav-dropdown-panel { display: block; }
+  .nav-dropdown-item {
+    width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px;
+    border: 0; border-radius: 9px; background: transparent; color: var(--ink);
+    text-align: left; font: 600 13px 'Manrope', sans-serif; cursor: pointer;
+  }
+  .nav-dropdown-item svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--muted); }
+  .nav-dropdown-item:hover { background: var(--surface-2); }
+  .nav-dropdown-item.active { background: var(--wine-dark); color: #fff; }
+  .nav-dropdown-item.active svg { color: #fff; }
+  .nav-dropdown-divider { height: 1px; background: var(--line); margin: 7px 4px; }
+  .nav-dropdown-user { padding: 9px 11px 5px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+  .nav-dropdown-logout { color: var(--wine-dark); }
+  .nav-dropdown-logout svg { color: var(--wine-dark); }
+
   .brand { padding: 0 20px 18px 20px; border-bottom: 1px solid rgba(255, 255, 255, .12); margin-bottom: 10px; }
   .brand-title { font-family: 'Fraunces', serif; font-size: 19px; color: #fff; font-weight: 600; line-height: 1.15; }
   .brand-sub { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: #D4C0B2; margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
@@ -605,9 +633,14 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     <div class="main">
       <div class="topbar">
         <div style="display:flex;align-items:center;gap:14px;min-width:0">
-          <button type="button" id="btnToggleSidebar" class="btn-sidebar-toggle" onclick="toggleSidebar()" title="Ocultar/mostrar menu lateral" aria-label="Ocultar ou mostrar menu lateral">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-          </button>
+          <div class="nav-dropdown-wrap" id="navDropdownWrap">
+            <button type="button" id="btnNavDropdown" class="btn-nav-dropdown" aria-expanded="false" aria-controls="navDropdownPanel" onclick="toggleNavDropdown()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              <span>Menu</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="m7 10 5 5 5-5"/></svg>
+            </button>
+            <div class="nav-dropdown-panel" id="navDropdownPanel" role="menu"></div>
+          </div>
           <div>
             <h1 id="pageTitle">Painel</h1>
             <div class="sub" id="pageSub"></div>
@@ -3532,17 +3565,27 @@ ${baseConfig.cuidados}
     const nav=document.getElementById('nav');
     if(nav) nav.innerHTML=items.map(it=>`<button class="nav-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
     if(nav) nav.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));
-    const m=document.getElementById('mobileNav');
-    if(m){
-      const itensHtml = items.map(it=>`<button class="${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
-      const sairHtml = `<button class="mnav-sair" data-action="sair">${iconLogout()}<span>Sair</span></button>`;
-      m.innerHTML = itensHtml + sairHtml;
-      m.querySelectorAll('button[data-route]').forEach(b=>b.onclick=()=>window.setRoute(b.dataset.route));
-      const btnSair = m.querySelector('button[data-action="sair"]');
-      if (btnSair) btnSair.onclick = () => { if (confirm('Deseja realmente sair da conta?')) window.fazerLogout(); };
+    const panel=document.getElementById('navDropdownPanel');
+    if(panel){
+      panel.innerHTML=items.map(it=>`<button type="button" role="menuitem" class="nav-dropdown-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('')
+        + `<div class="nav-dropdown-divider"></div><div class="nav-dropdown-user">${(window.currentFirebaseUser&&window.currentFirebaseUser.email)||''} · ${ROLE_LABELS[window.currentUserRole]||window.currentUserRole||''}</div><button type="button" role="menuitem" class="nav-dropdown-item nav-dropdown-logout" data-action="sair">${iconLogout()}<span>Sair da conta</span></button>`;
+      panel.querySelectorAll('button[data-route]').forEach(b=>b.onclick=()=>{window.setRoute(b.dataset.route);window.closeNavDropdown();});
+      const sair=panel.querySelector('button[data-action="sair"]');
+      if(sair) sair.onclick=()=>{window.closeNavDropdown();if(confirm('Deseja realmente sair da conta?')) window.fazerLogout();};
     }
     renderUserBar();
   };
+  window.toggleNavDropdown=function(){
+    const wrap=document.getElementById('navDropdownWrap'); if(!wrap)return;
+    const abrir=!wrap.classList.contains('open'); wrap.classList.toggle('open',abrir);
+    const btn=document.getElementById('btnNavDropdown'); if(btn)btn.setAttribute('aria-expanded',String(abrir));
+  };
+  window.closeNavDropdown=function(){
+    const wrap=document.getElementById('navDropdownWrap');if(wrap)wrap.classList.remove('open');
+    const btn=document.getElementById('btnNavDropdown');if(btn)btn.setAttribute('aria-expanded','false');
+  };
+  document.addEventListener('click',e=>{const wrap=document.getElementById('navDropdownWrap');if(wrap&&!wrap.contains(e.target))window.closeNavDropdown();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')window.closeNavDropdown();});
   window.setRoute = function(route){
     if(!can(route)) route = allowedNav()[0]?.id || 'produtos';
     if(ROUTE==='bipagem' && route!=='bipagem' && window.pararScannerBipagem) window.pararScannerBipagem();
@@ -4098,17 +4141,6 @@ ${baseConfig.cuidados}
 
 })();
 </script>
-<script>
-  // Ocultar/mostrar o menu lateral (lembra a escolha neste navegador)
-  (function(){
-    function aplicar(oculto){ document.body.classList.toggle('sidebar-hidden', !!oculto); }
-    window.toggleSidebar = function(){
-      const oculto = !document.body.classList.contains('sidebar-hidden');
-      aplicar(oculto);
-      try { localStorage.setItem('docemg_sidebar_oculta', oculto ? '1' : '0'); } catch(e){}
-    };
-    try { aplicar(localStorage.getItem('docemg_sidebar_oculta') === '1'); } catch(e){}
-  })();
-</script>
+
 </body>
 </html>
