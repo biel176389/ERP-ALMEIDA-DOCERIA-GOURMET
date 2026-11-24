@@ -3235,66 +3235,63 @@ ${baseConfig.cuidados}
       }, 200);
     }
 
+    window.RELATORIO_SECAO = window.RELATORIO_SECAO || 'visao';
+    window.setRelatorioSecao = function(secao) { window.RELATORIO_SECAO = secao; render(); };
     function viewRelatorios() {
       const st = PERIODO.relatorios || (PERIODO.relatorios = { f: 'mes', de: '', ate: '' });
-      const todas = (DB.vendas || []).slice();
+      const secao = window.RELATORIO_SECAO || 'visao';
       const datas = periodDaysFiltro(st, minDataVendas());
       const inicio = datas[0] || todayISO(), fim = datas[datas.length - 1] || todayISO();
-      const vendas = todas.filter(v => vendaDia(v) >= inicio && vendaDia(v) <= fim);
+      const vendas = (DB.vendas || []).filter(v => vendaDia(v) >= inicio && vendaDia(v) <= fim).sort((a,b) => vendaDia(b).localeCompare(vendaDia(a)));
       const receita = vendas.reduce((s,v) => s + vendasFaturamento(v), 0);
       const custos = vendas.map(v => vendaCusto(v));
       const semCusto = custos.filter(v => !Number.isFinite(v)).length;
-      const custoCompleto = semCusto === 0;
-      const cmv = custoCompleto ? custos.reduce((s,v) => s + v, 0) : null;
+      const completo = semCusto === 0;
+      const cmv = completo ? custos.reduce((s,v) => s + v, 0) : null;
       const comissoes = vendas.reduce((s,v) => s + (window.saleCommission ? window.saleCommission(v) : 0), 0);
       const extrato = extratoCaixa();
-      const lancPeriodo = extrato.filter(l => l.data >= inicio && l.data <= fim);
-      const entradas = lancPeriodo.filter(l => l.tipo === 'entrada').reduce((s,l) => s + Number(l.valor || 0), 0);
-      const saidas = lancPeriodo.filter(l => l.tipo === 'saida').reduce((s,l) => s + Number(l.valor || 0), 0);
-      const saldoAnterior = extrato.filter(l => l.data < inicio).reduce((s,l) => s + (l.tipo === 'entrada' ? Number(l.valor || 0) : -Number(l.valor || 0)), Number(DB.config && DB.config.saldoInicialCaixa) || 0);
-      const saldoFinal = saldoAnterior + entradas - saidas;
-      const categoriasIgnoradas = ['compra de insumos','embalagens','retirada/pró-labore'];
-      const despesas = lancPeriodo.filter(l => l.origem === 'manual' && l.tipo === 'saida' && !categoriasIgnoradas.includes(String(l.categoria || '').toLowerCase()));
+      const lanc = extrato.filter(l => l.data >= inicio && l.data <= fim);
+      const entradas = lanc.filter(l => l.tipo === 'entrada').reduce((s,l) => s + Number(l.valor || 0), 0);
+      const saidas = lanc.filter(l => l.tipo === 'saida').reduce((s,l) => s + Number(l.valor || 0), 0);
+      const saldoInicial = extrato.filter(l => l.data < inicio).reduce((s,l) => s + (l.tipo === 'entrada' ? Number(l.valor || 0) : -Number(l.valor || 0)), Number(DB.config && DB.config.saldoInicialCaixa) || 0);
+      const saldoFinal = saldoInicial + entradas - saidas;
+      const ignoradas = ['compra de insumos','embalagens','retirada/pró-labore'];
+      const despesas = lanc.filter(l => l.origem === 'manual' && l.tipo === 'saida' && !ignoradas.includes(String(l.categoria || '').toLowerCase()));
       const despOper = despesas.reduce((s,l) => s + Number(l.valor || 0), 0);
-      const lucroBruto = custoCompleto ? receita - cmv : null;
-      const lucroLiquido = custoCompleto ? lucroBruto - comissoes - despOper : null;
-      const margem = custoCompleto && receita > 0 ? lucroLiquido / receita * 100 : null;
+      const lucroBruto = completo ? receita - cmv : null;
+      const resultado = completo ? lucroBruto - comissoes - despOper : null;
+      const margem = completo && receita > 0 ? resultado / receita * 100 : null;
+      const qtd = vendas.reduce((s,v) => s + (v.itens || []).reduce((a,it) => a + (Number(it.qty) || 0), 0), 0);
       const ticket = vendas.length ? receita / vendas.length : 0;
-      const qtdItens = vendas.reduce((s,v) => s + (v.itens || []).reduce((a,it) => a + (Number(it.qty) || 0), 0), 0);
-      const contribuicao = custoCompleto ? receita - cmv - comissoes : null;
-      const contribuicaoUn = qtdItens > 0 && contribuicao !== null ? contribuicao / qtdItens : 0;
-      const peUn = contribuicaoUn > 0 ? Math.ceil(despOper / contribuicaoUn) : null;
-      const porCategoria = {}; despesas.forEach(l => { const k = l.categoria || 'Sem categoria'; porCategoria[k] = (porCategoria[k] || 0) + Number(l.valor || 0); });
-      const linhasCat = Object.entries(porCategoria).sort((a,b) => b[1]-a[1]).map(([k,v]) => '<tr><td>'+esc(k)+'</td><td style="text-align:right">'+fmtMoney(v)+'</td></tr>').join('');
+      const contribuicao = completo ? receita - cmv - comissoes : null;
+      const contribuicaoUn = qtd && contribuicao !== null ? contribuicao / qtd : 0;
+      const pe = contribuicaoUn > 0 ? Math.ceil(despOper / contribuicaoUn) : null;
       const fmt = v => v === null ? '—' : fmtMoney(v);
-      const aviso = semCusto ? '<div class="help-note" style="margin:12px 0">Atenção: '+semCusto+' venda(s) não possuem custo completo na ficha técnica. CMV, lucro e margem foram ocultados para evitar resultados incorretos.</div>' : '';
+      const pct = v => v === null ? '—' : v.toFixed(1).replace('.', ',') + '%';
+      const aviso = semCusto ? '<div class="help-note" style="margin:12px 0">'+semCusto+' venda(s) sem custo completo. Os indicadores de CMV, lucro e margem ficam indisponíveis para evitar uma análise incompleta.</div>' : '';
       const label = periodoLabel(st, datas);
-      return '<div class="card card-pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">Visão financeira</h3><p class="hint" style="margin:5px 0 0">Indicadores gerenciais · '+esc(label)+'</p></div>'+filtroPeriodoHtml('relatorios')+'</div></div>' + aviso +
-        '<div class="grid grid-4">' +
-        '<div class="card stat"><div class="label">Faturamento bruto</div><div class="value">'+fmtMoney(receita)+'</div><div class="delta">'+vendas.length+' venda(s)</div></div>' +
-        '<div class="card stat"><div class="label">CMV</div><div class="value">'+fmt(cmv)+'</div><div class="delta">Custo dos produtos vendidos</div></div>' +
-        '<div class="card stat"><div class="label">Lucro bruto</div><div class="value">'+fmt(lucroBruto)+'</div><div class="delta">Receita menos CMV</div></div>' +
-        '<div class="card stat"><div class="label">Resultado gerencial</div><div class="value">'+fmt(lucroLiquido)+'</div><div class="delta">Após comissões e despesas operacionais</div></div>' +
-        '</div><div class="grid grid-4" style="margin-top:14px">' +
-        '<div class="card stat"><div class="label">Margem líquida</div><div class="value">'+(margem === null ? '—' : margem.toFixed(1).replace('.',',')+'%')+'</div><div class="delta">Resultado / faturamento</div></div>' +
-        '<div class="card stat"><div class="label">Ticket médio</div><div class="value">'+fmtMoney(ticket)+'</div><div class="delta">Por venda registrada</div></div>' +
-        '<div class="card stat"><div class="label">Ponto de equilíbrio</div><div class="value">'+(peUn === null ? '—' : peUn+' un.')+'</div><div class="delta">Estimativa com despesas do período</div></div>' +
-        '<div class="card stat"><div class="label">Itens vendidos</div><div class="value">'+qtdItens+'</div><div class="delta">Unidades no período</div></div>' +
-        '</div><div class="grid grid-2" style="margin-top:14px">' +
-        '<div class="card card-pad"><h3>DRE gerencial</h3><table class="table"><tbody>' +
-        '<tr><td>Receita bruta</td><td style="text-align:right">'+fmtMoney(receita)+'</td></tr>' +
-        '<tr><td>(−) CMV</td><td style="text-align:right">'+fmt(cmv)+'</td></tr>' +
-        '<tr><td><b>Lucro bruto</b></td><td style="text-align:right"><b>'+fmt(lucroBruto)+'</b></td></tr>' +
-        '<tr><td>(−) Comissões</td><td style="text-align:right">'+fmtMoney(comissoes)+'</td></tr>' +
-        '<tr><td>(−) Despesas operacionais</td><td style="text-align:right">'+fmtMoney(despOper)+'</td></tr>' +
-        '<tr><td><b>Resultado gerencial</b></td><td style="text-align:right"><b>'+fmt(lucroLiquido)+'</b></td></tr>' +
-        '</tbody></table><p class="hint">Compras de insumos e embalagens ficam no fluxo de caixa e não são descontadas novamente na DRE. O consumo entra no CMV pela ficha técnica.</p></div>' +
-        '<div class="card card-pad"><h3>Resumo do fluxo de caixa</h3><div class="grid grid-2"><div><div class="label">Saldo inicial</div><div class="value">'+fmtMoney(saldoAnterior)+'</div></div><div><div class="label">Saldo final</div><div class="value">'+fmtMoney(saldoFinal)+'</div></div><div><div class="label">Entradas</div><div class="value">'+fmtMoney(entradas)+'</div></div><div><div class="label">Saídas</div><div class="value">'+fmtMoney(saidas)+'</div></div></div><p class="hint">Movimentações do caixa existente, sem duplicar lançamentos.</p></div>' +
-        '</div><div class="grid grid-2" style="margin-top:14px">' +
-        '<div class="card card-pad"><h3>Despesas operacionais por categoria</h3><table class="table"><tbody>'+(linhasCat || '<tr><td colspan="2">Nenhuma despesa operacional no período.</td></tr>')+'</tbody></table><p class="hint">Compras de insumos, embalagens e retiradas não entram nesta apuração de resultado.</p></div>' +
-        '<div class="card card-pad"><h3>Leitura dos indicadores</h3><p class="hint">Ponto de equilíbrio estimado em unidades: despesas operacionais divididas pela contribuição média por unidade (receita menos CMV e comissões). Como o sistema não separa formalmente custos fixos e variáveis, trate o número como referência gerencial.</p><p class="hint">Este demonstrativo não substitui uma DRE contábil e considera apenas lançamentos registrados no ERP.</p><p><b>Produções registradas:</b> '+(DB.producoes || []).length+'</p></div></div>';
+      const tabs = [['visao','Visão geral','Resumo dos resultados'],['vendas','Vendas e receita','Faturamento e volume'],['custos','Custos e rentabilidade','CMV, lucro e margem'],['caixa','Fluxo de caixa','Entradas, saídas e saldo'],['despesas','Despesas','Categorias e lançamentos']];
+      const nav = '<div class="card card-pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">Central de relatórios</h3><p class="hint" style="margin:5px 0 0">Análise financeira detalhada · '+esc(label)+'</p></div>'+filtroPeriodoHtml('relatorios')+'</div><div class="grid grid-5" style="margin-top:16px">'+tabs.map(t => '<button class="card card-pad" style="text-align:left;cursor:pointer;border:1px solid '+(secao===t[0]?'var(--primary)':'var(--border)')+';background:'+(secao===t[0]?'var(--surface-2)':'var(--surface)')+'" onclick="setRelatorioSecao(\''+t[0]+'\')"><b style="display:block;color:'+(secao===t[0]?'var(--primary)':'var(--text)')+'">'+t[1]+'</b><span class="hint" style="font-size:11px">'+t[2]+'</span></button>').join('')+'</div></div>';
+      const mini = (nome, valor, desc) => '<div class="card stat"><div class="label">'+nome+'</div><div class="value">'+valor+'</div><div class="delta">'+desc+'</div></div>';
+      const dre = '<div class="card card-pad"><h3>Demonstração do resultado gerencial</h3><table class="table"><tbody><tr><td>Receita bruta</td><td style="text-align:right">'+fmtMoney(receita)+'</td></tr><tr><td>(−) Custo dos produtos vendidos</td><td style="text-align:right">'+fmt(cmv)+'</td></tr><tr><td><b>Lucro bruto</b></td><td style="text-align:right"><b>'+fmt(lucroBruto)+'</b></td></tr><tr><td>(−) Comissões de venda</td><td style="text-align:right">'+fmtMoney(comissoes)+'</td></tr><tr><td>(−) Despesas operacionais registradas</td><td style="text-align:right">'+fmtMoney(despOper)+'</td></tr><tr><td><b>Resultado gerencial</b></td><td style="text-align:right"><b>'+fmt(resultado)+'</b></td></tr></tbody></table><p class="hint">Compras de insumos e embalagens aparecem no caixa como aquisição de estoque. O consumo dos materiais compõe o CMV pela ficha técnica, sem duplicar a despesa.</p></div>';
+      let detalhe = '';
+      if (secao === 'visao') {
+        detalhe = '<div class="grid grid-4">'+mini('Faturamento bruto',fmtMoney(receita),vendas.length+' vendas registradas')+mini('CMV',fmt(cmv),'Custo das unidades vendidas')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Resultado gerencial',fmt(resultado),'Após comissões e despesas')+'</div><div class="grid grid-4" style="margin-top:12px">'+mini('Margem líquida',pct(margem),'Resultado sobre faturamento')+mini('Ticket médio',fmtMoney(ticket),'Valor médio por venda')+mini('Ponto de equilíbrio',pe===null?'—':pe+' unidades','Estimativa para cobrir despesas')+mini('Unidades vendidas',String(qtd),'Volume no período')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Resumo do período</h3><p><b>Período analisado:</b> '+esc(label)+'</p><p><b>Vendas registradas:</b> '+vendas.length+'</p><p><b>Produções registradas:</b> '+(DB.producoes||[]).length+'</p><p><b>Comissões calculadas:</b> '+fmtMoney(comissoes)+'</p><p class="hint">Use as seções acima para abrir cada demonstrativo e consultar os detalhes.</p></div></div>';
+      } else if (secao === 'vendas') {
+        const linhas = vendas.map(v => { const itens=(v.itens||[]).reduce((s,it)=>s+(Number(it.qty)||0),0); return '<tr><td>'+esc(fmtDate(vendaDia(v)))+'</td><td>'+itens+'</td><td style="text-align:right">'+fmtMoney(vendasFaturamento(v))+'</td><td style="text-align:right">'+fmt(vendaCusto(v))+'</td></tr>'; }).join('');
+        detalhe = '<div class="grid grid-4">'+mini('Faturamento',fmtMoney(receita),'Receita bruta')+mini('Quantidade de vendas',String(vendas.length),'Transações no período')+mini('Ticket médio',fmtMoney(ticket),'Receita ÷ vendas')+mini('Unidades vendidas',String(qtd),'Itens vendidos')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Movimentação de vendas</h3><p class="hint">Cada linha representa uma venda registrada no ERP.</p><table class="table"><thead><tr><th>Data</th><th>Unidades</th><th style="text-align:right">Receita</th><th style="text-align:right">Custo estimado</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">Nenhuma venda no período.</td></tr>')+'</tbody></table></div>';
+      } else if (secao === 'custos') {
+        detalhe = '<div class="grid grid-4">'+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div>';
+      } else if (secao === 'caixa') {
+        const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td></tr>').join('');
+        detalhe = '<div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div>';
+      } else if (secao === 'despesas') {
+        const grupos={}; despesas.forEach(l=>{const k=l.categoria||'Sem categoria';grupos[k]=(grupos[k]||0)+Number(l.valor||0);});
+        const linhas=Object.entries(grupos).sort((a,b)=>b[1]-a[1]).map(x=>'<tr><td>'+esc(x[0])+'</td><td style="text-align:right">'+fmtMoney(x[1])+'</td><td style="text-align:right">'+(despOper?((x[1]/despOper)*100).toFixed(1).replace('.',',')+'%':'0,0%')+'</td></tr>').join('');
+        detalhe = '<div class="grid grid-3">'+mini('Despesas operacionais',fmtMoney(despOper),'Consideradas no resultado')+mini('Quantidade de lançamentos',String(despesas.length),'Saídas operacionais')+mini('Participação no faturamento',receita?(despOper/receita*100).toFixed(1).replace('.',',')+'%':'—','Despesas ÷ receita')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Despesas por categoria</h3><table class="table"><thead><tr><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Participação</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="3">Nenhuma despesa operacional no período.</td></tr>')+'</tbody></table><p class="hint">Compras de insumos, embalagens e retiradas não entram nesta apuração de despesas operacionais. Elas permanecem visíveis no fluxo de caixa.</p></div>';
+      }
+      return nav + aviso + '<div style="margin-bottom:10px"><h3 style="margin:0">'+(tabs.find(t=>t[0]===secao)||tabs[0])[1]+'</h3><p class="hint" style="margin:4px 0 0">'+(tabs.find(t=>t[0]===secao)||tabs[0])[2]+'</p></div>' + detalhe;
     }
-
     function viewConfig() {
       const cfg = DB.config;
       return `
