@@ -593,6 +593,26 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
   .file-input-wrapper input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
   .btn-salvar-info { padding: 7px 11px !important; font-size: 13px !important; min-height: 34px; }
 
+  /* Mantém a tipografia dos blocos igual no desktop e no celular */
+  .relatorio-secao-btn,
+  .relatorio-secao-btn:link,
+  .relatorio-secao-btn:visited,
+  .relatorio-secao-btn:hover,
+  .relatorio-secao-btn:active {
+    color:var(--ink) !important;
+    -webkit-text-fill-color:var(--ink);
+    text-decoration:none;
+    -webkit-appearance:none;
+    appearance:none;
+  }
+  .relatorio-secao-btn b {
+    color:var(--ink) !important;
+    -webkit-text-fill-color:var(--ink);
+  }
+  .relatorio-secao-btn .hint {
+    color:var(--muted) !important;
+    -webkit-text-fill-color:var(--muted);
+  }
   /* Ajustes responsivos exclusivos dos relatórios */
   .relatorio-secoes-grid {
     display:grid;
