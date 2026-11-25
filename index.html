@@ -1262,7 +1262,7 @@ ${baseConfig.cuidados}
       return out;
     }
 
-    let ROUTE = 'dashboard';
+    let ROUTE = window.ROUTE = 'dashboard';
     let SALE_CART = [];
     let BIPAGEM_TIPO = 'venda';
     let html5QrScannerBip = null;
@@ -1323,7 +1323,7 @@ ${baseConfig.cuidados}
 
     function setRoute(r) {
       if (ROUTE === 'bipagem' && r !== 'bipagem') pararScannerBipagem();
-      ROUTE = r;
+      ROUTE = window.ROUTE = r;
       render();
       if (r === 'etiquetas') aplicarLayoutEtiquetaCSS();
     }
@@ -3605,7 +3605,7 @@ ${baseConfig.cuidados}
         const linhas = vendas.map(v => { const itens=(v.itens||[]).reduce((s,it)=>s+(Number(it.qty)||0),0); return '<tr><td>'+esc(fmtDate(vendaDia(v)))+'</td><td>'+itens+'</td><td style="text-align:right">'+fmtMoney(vendasFaturamento(v))+'</td><td style="text-align:right">'+fmt(vendaCusto(v))+'</td></tr>'; }).join('');
         detalhe = '<div class="grid grid-4">'+mini('Faturamento',fmtMoney(receita),'Receita bruta')+mini('Quantidade de vendas',String(vendas.length),'Transações no período')+mini('Ticket médio',fmtMoney(ticket),'Receita ÷ vendas')+mini('Unidades vendidas',String(qtd),'Itens vendidos')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Movimentação de vendas</h3><p class="hint">Cada linha representa uma venda registrada no ERP.</p><table class="table"><thead><tr><th>Data</th><th>Unidades</th><th style="text-align:right">Receita</th><th style="text-align:right">Custo estimado</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">Nenhuma venda no período.</td></tr>')+'</tbody></table></div>';
       } else if (secao === 'custos') {
-        detalhe = '<div class="relatorio-custos-view"><div class="grid grid-4">+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div></div>';
+        detalhe = '<div class="relatorio-custos-view"><div class="grid grid-4">'+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div></div>';
       } else if (secao === 'caixa') {
         const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td><td>'+ (l.origem==='manual' && window.currentUserRole==='admin' ? '<button class="btn btn-secondary" onclick="modalCaixa(\''+esc(l.id)+'\')">Editar</button> <button class="btn btn-secondary" onclick="deletarCaixa(\''+esc(l.id)+'\')">Excluir</button>' : (l.origem==='manual' ? '<span class="hint">Lançamento manual</span>' : '<span class="hint">Automático</span>')) +'</td></tr>').join('');
         detalhe = (window.currentUserRole==='admin' ? '<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn btn-primary" onclick="modalCaixa()">+ Novo lançamento</button></div>' : '')+'<div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><div class="table-wrap"><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th><th>Ações</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div></div>';
@@ -4003,7 +4003,7 @@ ${baseConfig.cuidados}
   window.renderUserBar = renderUserBar;
   window.renderNav = function(){
     const items = allowedNav();
-    const html = items.map(it=>`<button type="button" class="${ROUTE===it.id?'active':''}" data-route="${it.id}" aria-current="${ROUTE===it.id?'page':'false'}">${it.icon()}<span>${it.label}</span></button>`).join('')
+    const html = items.map(it=>`<button type="button" class="${window.ROUTE===it.id?'active':''}" data-route="${it.id}" aria-current="${window.ROUTE===it.id?'page':'false'}">${it.icon()}<span>${it.label}</span></button>`).join('')
       + `<span class="top-nav-spacer"></span><button type="button" class="theme-toggle" onclick="window.alternarTema()" aria-label="Alternar tema">${document.documentElement.getAttribute("data-theme")==="dark"?"☀":"☾"}<span>${document.documentElement.getAttribute("data-theme")==="dark"?"Modo claro":"Modo escuro"}</span></button><button type="button" class="top-nav-logout" data-action="sair">${iconLogout()}<span>Sair</span></button>`;
     const top=document.getElementById('topNav');
     if(top){
@@ -4013,7 +4013,7 @@ ${baseConfig.cuidados}
       if(sair)sair.onclick=()=>{if(confirm('Deseja realmente sair da conta?'))window.fazerLogout();};
     }
     const nav=document.getElementById('nav');
-    if(nav)nav.innerHTML=items.map(it=>`<button class="nav-item ${ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
+    if(nav)nav.innerHTML=items.map(it=>`<button class="nav-item ${window.ROUTE===it.id?'active':''}" data-route="${it.id}">${it.icon()}<span>${it.label}</span></button>`).join('');
     if(nav)nav.querySelectorAll('.nav-item').forEach(btn=>btn.onclick=()=>window.setRoute(btn.dataset.route));
     renderUserBar();
   };
@@ -4021,8 +4021,8 @@ ${baseConfig.cuidados}
 
   window.setRoute = function(route){
     if(!can(route)) route = allowedNav()[0]?.id || 'produtos';
-    if(ROUTE==='bipagem' && route!=='bipagem' && window.pararScannerBipagem) window.pararScannerBipagem();
-    ROUTE=route;
+    if(window.ROUTE==='bipagem' && route!=='bipagem' && window.pararScannerBipagem) window.pararScannerBipagem();
+    window.ROUTE=route;
     window.render();
     if(route==='etiquetas' && window.aplicarLayoutEtiquetaCSS) window.aplicarLayoutEtiquetaCSS();
   };
@@ -4606,22 +4606,22 @@ ${baseConfig.cuidados}
 
   // ---------- Render central com bloqueio de rota e ações ----------
   window.render = async function(){
-    if(!can(ROUTE)) ROUTE=allowedNav()[0]?.id||'produtos';
+    if(!can(window.ROUTE)) window.ROUTE=allowedNav()[0]?.id||'produtos';
     window.renderNav();
-    const title=titles[ROUTE]||['ERP',''];
+    const title=titles[window.ROUTE]||['ERP',''];
     document.getElementById('pageTitle').textContent=title[0]; document.getElementById('pageSub').textContent=title[1];
     const c=document.getElementById('content'), actions=document.getElementById('topbarActions'); actions.innerHTML='';
-    if(ROUTE==='dashboard'){ c.innerHTML=window.viewDashboard(); if(isAdmin()&&window.renderDashCharts) window.renderDashCharts(); }
-    else if(ROUTE==='estoque'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`; c.innerHTML=window.viewEstoque(); }
-    else if(ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
-    else if(ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
-    else if(ROUTE==='vendas'){ if(isAdmin()||isSeller()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`; c.innerHTML=window.viewVendas(); }
-        else if(ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
-    else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
-    else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
-    else if(ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
-    else if(ROUTE==='planejamento') c.innerHTML=window.viewPlanejamentoFinanceiro();
-    else if(ROUTE==='config') c.innerHTML=window.viewConfig() + (isAdmin() ? await window.viewUsuarios() : '');
+    if(window.ROUTE==='dashboard'){ c.innerHTML=window.viewDashboard(); if(isAdmin()&&window.renderDashCharts) window.renderDashCharts(); }
+    else if(window.ROUTE==='estoque'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalInsumo()">+ Novo Insumo</button>`; c.innerHTML=window.viewEstoque(); }
+    else if(window.ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
+    else if(window.ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
+    else if(window.ROUTE==='vendas'){ if(isAdmin()||isSeller()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`; c.innerHTML=window.viewVendas(); }
+        else if(window.ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
+    else if(window.ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
+    else if(window.ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
+    else if(window.ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
+    else if(window.ROUTE==='planejamento') c.innerHTML=window.viewPlanejamentoFinanceiro();
+    else if(window.ROUTE==='config') c.innerHTML=window.viewConfig() + (isAdmin() ? await window.viewUsuarios() : '');
   };
 
   ['salvarInsumo','deletarInsumo','salvarProducao','deletarProducao','salvarConfig','salvarCaixa','deletarCaixa'].forEach(fn=>{
@@ -4682,7 +4682,7 @@ ${baseConfig.cuidados}
       el.textContent = `${window.currentFirebaseUser.email || 'Usuário'} · ${roleLabel}`;
     }
 
-    if (!can(ROUTE)) ROUTE = allowedNav()[0]?.id || 'produtos';
+    if (!can(window.ROUTE)) window.ROUTE = allowedNav()[0]?.id || 'produtos';
 
     if (typeof window.loadAll === 'function') {
       try { await window.loadAll(); } catch (e) { console.error('loadAll falhou:', e); }
