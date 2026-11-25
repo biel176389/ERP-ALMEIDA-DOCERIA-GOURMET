@@ -680,6 +680,26 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
     .relatorio-modal .modal-head h3 { font-size:16px; }
   }
 </style>
+<style id="almeida-theme-system">
+:root[data-theme="dark"]{color-scheme:dark;--bg:#211A17;--surface:#2C231F;--surface-2:#382C26;--ink:#F2E8DF;--muted:#B9A89B;--line:#514137;--wine:#B98560;--wine-dark:#8A5A3D;--wine-light:#49362B;--gold:#D2A875;--gold-light:#493A2D;--green:#83B394;--green-light:#293D31;--red:#D68B78;--red-light:#482F2A;--shadow:0 2px 5px rgba(0,0,0,.18),0 8px 24px rgba(0,0,0,.22)}
+:root[data-theme="dark"] body,:root[data-theme="dark"] #app{background:var(--bg);color:var(--ink)}
+:root[data-theme="dark"] .top-nav,:root[data-theme="dark"] .topbar,:root[data-theme="dark"] .card,:root[data-theme="dark"] .modal,:root[data-theme="dark"] .planning-panel,:root[data-theme="dark"] .planning-metric,:root[data-theme="dark"] .login-card{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea,:root[data-theme="dark"] .input{background:#241D19;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] input::placeholder,:root[data-theme="dark"] textarea::placeholder{color:#9B897D}
+:root[data-theme="dark"] table th{background:var(--surface-2);color:var(--ink)}
+:root[data-theme="dark"] table td{border-color:var(--line)}
+:root[data-theme="dark"] .top-nav button:hover{background:var(--surface-2);color:var(--ink)}
+:root[data-theme="dark"] .top-nav button.active{background:var(--wine-dark);color:#fff}
+:root[data-theme="dark"] .top-nav button.top-nav-logout,:root[data-theme="dark"] .top-nav button.theme-toggle{color:var(--ink);border:1px solid var(--line)}
+:root[data-theme="dark"] .login-tabs{background:var(--surface-2)}
+:root[data-theme="dark"] .login-tab{color:var(--muted)}
+:root[data-theme="dark"] .login-tab.active{background:var(--wine-dark);color:#fff}
+:root[data-theme="dark"] .login-btn-google{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .divider,:root[data-theme="dark"] .table-wrap{border-color:var(--line)}
+.top-nav button.theme-toggle{border:1px solid var(--line);color:var(--wine-dark)}
+.top-nav button.theme-toggle:hover{background:var(--surface-2)}
+@media(max-width:880px){.top-nav button.theme-toggle{padding:8px 10px}}
+</style>
 </head>
 <body>
 
@@ -3786,7 +3806,7 @@ ${baseConfig.cuidados}
   window.renderNav = function(){
     const items = allowedNav();
     const html = items.map(it=>`<button type="button" class="${ROUTE===it.id?'active':''}" data-route="${it.id}" aria-current="${ROUTE===it.id?'page':'false'}">${it.icon()}<span>${it.label}</span></button>`).join('')
-      + `<span class="top-nav-spacer"></span><button type="button" class="top-nav-logout" data-action="sair">${iconLogout()}<span>Sair</span></button>`;
+      + `<span class="top-nav-spacer"></span><button type="button" class="theme-toggle" onclick="window.alternarTema()" aria-label="Alternar tema">${document.documentElement.getAttribute("data-theme")==="dark"?"☀":"☾"}<span>${document.documentElement.getAttribute("data-theme")==="dark"?"Modo claro":"Modo escuro"}</span></button><button type="button" class="top-nav-logout" data-action="sair">${iconLogout()}<span>Sair</span></button>`;
     const top=document.getElementById('topNav');
     if(top){
       top.innerHTML=html;
@@ -4464,5 +4484,26 @@ ${baseConfig.cuidados}
 })();
 </script>
 
+<script>
+(function(){
+ const KEY='almeida_doceria_theme';
+ function aplicarTema(theme){
+  const tema=theme==='dark'?'dark':'light';
+  document.documentElement.setAttribute('data-theme',tema);
+  try{localStorage.setItem(KEY,tema)}catch(e){}
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',tema==='dark'?'#211A17':'#5C3A26');
+  const botao=document.querySelector('#topNav .theme-toggle');
+  if(botao)botao.innerHTML=(tema==='dark'?'☀':'☾')+'<span>'+(tema==='dark'?'Modo claro':'Modo escuro')+'</span>';
+ }
+ window.alternarTema=function(){
+  const atual=document.documentElement.getAttribute('data-theme')||'light';
+  aplicarTema(atual==='dark'?'light':'dark');
+ };
+ let salvo='light';try{salvo=localStorage.getItem(KEY)||'light'}catch(e){}
+ aplicarTema(salvo);
+ window.addEventListener('storage',function(e){if(e.key===KEY)aplicarTema(e.newValue||'light')});
+})();
+</script>
 </body>
 </html>
