@@ -1194,7 +1194,7 @@ ${baseConfig.cuidados}
 
     // ---------- Filtro de período compartilhado (Dashboard e Caixa) ----------
     const FILTROS_PERIODO = [['hoje','Hoje'],['7','7 dias'],['30','1 Mês'],['custom','Personalizado']];
-    const PERIODO = { dash: { f: '7', de: '', ate: '' }, caixa: { f: '30', de: '', ate: '' }, relatorios: { f: 'mes', de: '', ate: '' } };
+    const PERIODO = { dash: { f: '7', de: '', ate: '' }, caixa: { f: '30', de: '', ate: '' }, relatorios: { f: '30', de: '', ate: '' } };
     const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     function periodDaysFiltro(st, minData) {
       const hoje = todayISO(); let ini = hoje, fim = hoje; const f = st.f;
@@ -3325,7 +3325,7 @@ ${baseConfig.cuidados}
       render();
     };
     function viewRelatorios() {
-      const st = PERIODO.relatorios || (PERIODO.relatorios = { f: 'mes', de: '', ate: '' });
+      const st = PERIODO.relatorios || (PERIODO.relatorios = { f: '30', de: '', ate: '' });
       const secao = window.RELATORIO_SECAO || 'visao';
       const datas = periodDaysFiltro(st, minDataVendas());
       const inicio = datas[0] || todayISO(), fim = datas[datas.length - 1] || todayISO();
@@ -3378,8 +3378,8 @@ ${baseConfig.cuidados}
       } else if (secao === 'custos') {
         detalhe = '<div class="grid grid-4">'+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div>';
       } else if (secao === 'caixa') {
-        const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td><td>'+ (l.origem==='manual' ? '<button class="btn btn-secondary btn-sm" onclick="modalCaixa(\''+esc(l.id)+'\')">Editar</button> <button class="btn btn-secondary btn-sm" onclick="deletarCaixa(\''+esc(l.id)+'\')">Excluir</button>' : '<span class="hint">Automático</span>') +'</td></tr>').join('');
-        detalhe = '<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn btn-primary" onclick="modalCaixa()">+ Novo lançamento</button></div><div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><div class="table-wrap"><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th><th>Ações</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div></div>';
+        const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td><td>'+ (l.origem==='manual' && window.currentUserRole==='admin' ? '<button class="btn btn-secondary" onclick="modalCaixa(\''+esc(l.id)+'\')">Editar</button> <button class="btn btn-secondary" onclick="deletarCaixa(\''+esc(l.id)+'\')">Excluir</button>' : (l.origem==='manual' ? '<span class="hint">Lançamento manual</span>' : '<span class="hint">Automático</span>')) +'</td></tr>').join('');
+        detalhe = (window.currentUserRole==='admin' ? '<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn btn-primary" onclick="modalCaixa()">+ Novo lançamento</button></div>' : '')+'<div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><div class="table-wrap"><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th><th>Ações</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div></div>';
       } else if (secao === 'despesas') {
         const grupos={}; despesas.forEach(l=>{const k=l.categoria||'Sem categoria';grupos[k]=(grupos[k]||0)+Number(l.valor||0);});
         const linhas=Object.entries(grupos).sort((a,b)=>b[1]-a[1]).map(x=>'<tr><td>'+esc(x[0])+'</td><td style="text-align:right">'+fmtMoney(x[1])+'</td><td style="text-align:right">'+(despOper?((x[1]/despOper)*100).toFixed(1).replace('.',',')+'%':'0,0%')+'</td></tr>').join('');
