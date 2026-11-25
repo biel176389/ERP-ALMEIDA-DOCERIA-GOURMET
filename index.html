@@ -841,6 +841,40 @@ img,svg,canvas{max-width:100%}
 }
 </style>
 
+
+<style id="relatorio-custos-text-fix">
+/* Custos e rentabilidade: impedir que rótulos e descrições sejam cortados */
+.relatorio-custos-view,
+.relatorio-custos-view .grid,
+.relatorio-custos-view .card,
+.relatorio-custos-view .stat{min-width:0;max-width:100%;box-sizing:border-box}
+.relatorio-custos-view>.grid:first-child{grid-template-columns:repeat(4,minmax(0,1fr));}
+.relatorio-custos-view>.grid:last-child{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.relatorio-custos-view .stat .label,
+.relatorio-custos-view .stat .delta,
+.relatorio-custos-view .card h3,
+.relatorio-custos-view .card p,
+.relatorio-custos-view .card .hint,
+.relatorio-custos-view .card td{
+ min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:normal;hyphens:auto;line-height:1.5
+}
+.relatorio-custos-view .stat .label{font-size:10px;letter-spacing:.035em;line-height:1.45}
+.relatorio-custos-view .stat .value{min-width:0;overflow-wrap:anywhere;font-size:clamp(19px,2.2vw,28px);line-height:1.2}
+.relatorio-custos-view .card-pad{padding:clamp(13px,1.6vw,20px)}
+.relatorio-custos-view .card table{width:100%;table-layout:fixed}
+.relatorio-custos-view .card table td:first-child{width:68%;padding-left:4px}
+.relatorio-custos-view .card table td:last-child{width:32%;padding-right:4px}
+@media(max-width:880px){
+ .relatorio-custos-view>.grid:first-child{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .relatorio-custos-view>.grid:last-child{grid-template-columns:minmax(0,1fr);gap:10px}
+}
+@media(max-width:420px){
+ .relatorio-custos-view>.grid:first-child{grid-template-columns:minmax(0,1fr)}
+ .relatorio-custos-view .stat{padding:14px}
+ .relatorio-custos-view .stat .label{font-size:11px}
+}
+</style>
+
 </head>
 <body>
 
@@ -3569,7 +3603,7 @@ ${baseConfig.cuidados}
         const linhas = vendas.map(v => { const itens=(v.itens||[]).reduce((s,it)=>s+(Number(it.qty)||0),0); return '<tr><td>'+esc(fmtDate(vendaDia(v)))+'</td><td>'+itens+'</td><td style="text-align:right">'+fmtMoney(vendasFaturamento(v))+'</td><td style="text-align:right">'+fmt(vendaCusto(v))+'</td></tr>'; }).join('');
         detalhe = '<div class="grid grid-4">'+mini('Faturamento',fmtMoney(receita),'Receita bruta')+mini('Quantidade de vendas',String(vendas.length),'Transações no período')+mini('Ticket médio',fmtMoney(ticket),'Receita ÷ vendas')+mini('Unidades vendidas',String(qtd),'Itens vendidos')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Movimentação de vendas</h3><p class="hint">Cada linha representa uma venda registrada no ERP.</p><table class="table"><thead><tr><th>Data</th><th>Unidades</th><th style="text-align:right">Receita</th><th style="text-align:right">Custo estimado</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">Nenhuma venda no período.</td></tr>')+'</tbody></table></div>';
       } else if (secao === 'custos') {
-        detalhe = '<div class="grid grid-4">'+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div>';
+        detalhe = '<div class="relatorio-custos-view"><div class="grid grid-4">+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div></div>';
       } else if (secao === 'caixa') {
         const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td><td>'+ (l.origem==='manual' && window.currentUserRole==='admin' ? '<button class="btn btn-secondary" onclick="modalCaixa(\''+esc(l.id)+'\')">Editar</button> <button class="btn btn-secondary" onclick="deletarCaixa(\''+esc(l.id)+'\')">Excluir</button>' : (l.origem==='manual' ? '<span class="hint">Lançamento manual</span>' : '<span class="hint">Automático</span>')) +'</td></tr>').join('');
         detalhe = (window.currentUserRole==='admin' ? '<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn btn-primary" onclick="modalCaixa()">+ Novo lançamento</button></div>' : '')+'<div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><div class="table-wrap"><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th><th>Ações</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div></div>';
