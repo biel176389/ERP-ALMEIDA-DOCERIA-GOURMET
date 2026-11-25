@@ -2184,7 +2184,7 @@ ${baseConfig.cuidados}
           statusAcerto: vendaAntiga.statusAcerto || 'pendente'
         };
         DB.vendas[idx].prolaboreValor = window.calcularProlaboreVenda ? window.calcularProlaboreVenda(DB.vendas[idx]) : 0;
-        DB.vendas[idx].prolaborePercentual = pctRetirada();
+        DB.vendas[idx].prolaborePercentual = Number(DB.config && DB.config.pctProlaboreVenda) || 0;
         if (window.salvarVendaFirestore) window.salvarVendaFirestore(DB.vendas[idx]);
 
         persist('produtos', 'vendas', 'producoes');
@@ -2213,7 +2213,7 @@ ${baseConfig.cuidados}
         statusAcerto: 'pendente'
       };
       vendaNova.prolaboreValor = window.calcularProlaboreVenda ? window.calcularProlaboreVenda(vendaNova) : 0;
-      vendaNova.prolaborePercentual = pctRetirada();
+      vendaNova.prolaborePercentual = Number(DB.config && DB.config.pctProlaboreVenda) || 0;
       DB.vendas.push(vendaNova);
       if (window.salvarVendaFirestore) window.salvarVendaFirestore(vendaNova);
 
@@ -2830,7 +2830,7 @@ ${baseConfig.cuidados}
           statusAcerto: 'pendente'
         };
         vendaBipagem.prolaboreValor = window.calcularProlaboreVenda ? window.calcularProlaboreVenda(vendaBipagem) : 0;
-        vendaBipagem.prolaborePercentual = pctRetirada();
+        vendaBipagem.prolaborePercentual = Number(DB.config && DB.config.pctProlaboreVenda) || 0;
         DB.vendas.push(vendaBipagem);
         if (window.salvarVendaFirestore) window.salvarVendaFirestore(vendaBipagem);
       }
@@ -3421,7 +3421,7 @@ ${baseConfig.cuidados}
           </div>
           <div class="field" style="max-width:280px;">
             <label>Percentual da margem por venda destinado ao pró-labore</label>
-            <input type="number" min="0" max="100" step="0.1" id="cfgPctRetirada" class="input" value="${(cfg.pctRetirada !== undefined && cfg.pctRetirada !== null && cfg.pctRetirada !== '' && Number.isFinite(Number(cfg.pctRetirada))) ? Number(cfg.pctRetirada) : 0}">
+            <input type="number" min="0" max="100" step="0.1" id="cfgPctRetirada" class="input" value="${(cfg.pctProlaboreVenda !== undefined && cfg.pctProlaboreVenda !== null && cfg.pctProlaboreVenda !== '' && Number.isFinite(Number(cfg.pctProlaboreVenda))) ? Number(cfg.pctProlaboreVenda) : 0}">
             <p class="hint">Em cada venda recebida, o ERP calcula a margem após custo dos produtos e comissão. O percentual definido aqui é reservado automaticamente para seu pró-labore. Vendas antigas não serão recalculadas.</p>
           </div>
           <button class="btn btn-primary" onclick="salvarConfig()">Salvar Configurações</button>
@@ -3434,7 +3434,7 @@ ${baseConfig.cuidados}
       DB.config.whatsapp = document.getElementById('cfgWhatsapp').value;
       DB.config.instagram = document.getElementById('cfgInstagram').value;
       const pctEl = document.getElementById('cfgPctRetirada');
-      if (pctEl && Number.isFinite(parseFloat(pctEl.value))) DB.config.pctRetirada = Math.min(100, Math.max(0, parseFloat(pctEl.value)));
+      if (pctEl && Number.isFinite(parseFloat(pctEl.value))) DB.config.pctProlaboreVenda = Math.min(100, Math.max(0, parseFloat(pctEl.value)));
       const saldoEl = document.getElementById('cfgSaldoInicialCaixa');
       if (saldoEl) {
         const saldo = saldoEl.value === '' ? NaN : Number(saldoEl.value);
@@ -4149,7 +4149,7 @@ ${baseConfig.cuidados}
   const RE_RETIRADA=/pr[óo]-?labore|retirada/i;
   const RE_FINANC=/aporte|investimento|empr[ée]stimo/i;
   function pctRetirada(){
-    const n=(DB.config||{}).pctRetirada; const x=(n===null||n===undefined||n==='')?NaN:Number(n);
+    const n=(DB.config||{}).pctProlaboreVenda; const x=(n===null||n===undefined||n==='')?NaN:Number(n);
     return Number.isFinite(x)?Math.min(100,Math.max(0,x)):0;
   }
   function resumoLucro(){
@@ -4177,14 +4177,15 @@ ${baseConfig.cuidados}
     const retiradoAcum=lista.reduce((t,r)=>t+r.retirado,0);
     const pct=pctRetirada();
     const prolaboreAcumulado=(DB.vendas||[]).reduce((t,v)=>t+(window.vendaAguardandoAcerto&&window.vendaAguardandoAcerto(v)?0:Math.max(0,Number(v.prolaboreValor)||0)),0);
+    const prolaboreRetiradoAcum=(DB.caixa||[]).filter(c=>c.tipo==='saida'&&c.prolabore===true).reduce((t,c)=>t+(Number(c.valor)||0),0);
     const liberado=prolaboreAcumulado;
     const saldoCaixa=extrato.length?extrato[extrato.length-1].saldoAcumulado:(Number(DB.config&&DB.config.saldoInicialCaixa)||0);
-    const disponivel=Math.max(0,Math.min(liberado-retiradoAcum,saldoCaixa));
+    const disponivel=Math.max(0,Math.min(liberado-prolaboreRetiradoAcum,saldoCaixa));
     const aReceber=(DB.vendas||[]).filter(v=>window.vendaAguardandoAcerto&&window.vendaAguardandoAcerto(v)).reduce((t,v)=>t+saleRepasse(v),0);
     const estInsumos=(DB.insumos||[]).reduce((t,i)=>t+Math.max(0,Number(i.estoque)||0)*(Number(i.custo)||0),0);
     const estProdutos=(DB.produtos||[]).reduce((t,p)=>{ const cu=custoUnitarioProduto(p); return t+(cu!==null&&cu!==undefined?cu*Math.max(0,Number(p.estoque)||0):0); },0);
     const capital=saldoCaixa+aReceber+estInsumos+estProdutos;
-    return {lista:lista,atual:meses[mesAtual],estimadoAcum:estimadoAcum,realAcum:ac,retiradoAcum:retiradoAcum,prolaboreAcumulado:prolaboreAcumulado,pct:pct,liberado:liberado,saldoCaixa:saldoCaixa,disponivel:disponivel,retido:ac-retiradoAcum,aReceber:aReceber,estInsumos:estInsumos,estProdutos:estProdutos,capital:capital};
+    return {lista:lista,atual:meses[mesAtual],estimadoAcum:estimadoAcum,realAcum:ac,retiradoAcum:retiradoAcum,prolaboreRetiradoAcum:prolaboreRetiradoAcum,prolaboreAcumulado:prolaboreAcumulado,pct:pct,liberado:liberado,saldoCaixa:saldoCaixa,disponivel:disponivel,retido:ac-retiradoAcum,aReceber:aReceber,estInsumos:estInsumos,estProdutos:estProdutos,capital:capital};
   }
   window.resumoLucro=resumoLucro;
   window.cardLucroCapital=function(){
@@ -4195,13 +4196,13 @@ ${baseConfig.cuidados}
     const grade='display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px';
     const linhas=r.lista.slice().reverse().slice(0,12).map(m=>`<tr><td>${m.ym.slice(5)}/${m.ym.slice(0,4)}</td><td>${Number.isFinite(m.estimado)?fmtMoney(m.estimado):'—'}</td><td>${fmtMoney(m.real)}</td><td>${fmtMoney(m.retirado)}</td><td><b>${fmtMoney(m.acumulado)}</b></td></tr>`).join('');
     return `<div style="margin-top:16px">
-      <div class="section-title" style="margin-top:0"><h2>Pró-labore por venda</h2><span class="hint">${r.pct}% da margem de cada venda recebida · ajuste em Configurações)</span></div>
-      <div class="help-note"><b>Resultado parcial estimado:</b> vendas − custo dos insumos − comissões; não inclui necessariamente todas as despesas, taxas e impostos. Meses com custo incompleto aparecem como “—”. <b>Sobra operacional de caixa:</b> entradas e saídas registradas, excluindo aportes/empréstimos e retiradas. É uma medida de caixa, não lucro contábil.</div>
+      <div class="section-title" style="margin-top:0"><h2>Pró-labore por venda</h2><span class="hint">${r.pct}% da margem de cada venda recebida · ajuste em Configurações</span></div>
+      <div class="help-note"><b>Cálculo do pró-labore:</b> cada venda recebida gera uma reserva sobre o valor que sobra após o custo dos produtos e a comissão. Vendas de vendedores só entram após o acerto. Se a ficha técnica estiver incompleta, a venda não gera pró-labore até ter custo conhecido. O percentual é configurado em Configurações. <b>Resultado parcial estimado:</b> entradas e saídas registradas, excluindo aportes/empréstimos e retiradas. É uma medida de caixa, não lucro contábil.</div>
       <div style="${grade}">
         ${card('Resultado parcial (mês)',at.estimado,Number.isFinite(r.estimadoAcum)?'Acumulado: '+fmtMoney(r.estimadoAcum):'Acumulado indisponível: há mês(es) com custo incompleto')}
         ${card('Sobra operacional de caixa (mês)',at.real,'Acumulado: '+fmtMoney(r.realAcum),at.real>=0?'':verm)}
         ${card('Pró-labore acumulado',r.liberado,'Valores reservados automaticamente nas vendas recebidas') }
-        ${card('Já retirado',r.retiradoAcum,'Retiradas lançadas no caixa')}
+        ${card('Já retirado',r.prolaboreRetiradoAcum,'Saques de pró-labore registrados')}
         ${card('Disponível para saque',r.disponivel,'Após retiradas e limitado ao saldo do caixa ('+fmtMoney(r.saldoCaixa)+')',r.disponivel>0?verde:'')}
         ${card('Reserva de caixa estimada',r.retido,'Sobra operacional acumulada − retiradas',r.retido>=0?'':verm)}
       </div>
@@ -4236,7 +4237,7 @@ ${baseConfig.cuidados}
     if(valor<=0) return toast('Informe um valor maior que zero','err');
     const disp=resumoLucro().disponivel;
     if(valor>disp+0.005) return toast('O saque não pode ser maior que o valor disponível ('+fmtMoney(disp)+').','err');
-    DB.caixa.push({id:uid(),tipo:'saida',data:document.getElementById('retData').value||todayISO(),categoria:'Retirada/Pró-labore',descricao:document.getElementById('retDesc').value.trim()||'Saque de pró-labore',valor:valor});
+    DB.caixa.push({id:uid(),tipo:'saida',data:document.getElementById('retData').value||todayISO(),categoria:'Retirada/Pró-labore',descricao:document.getElementById('retDesc').value.trim()||'Saque de pró-labore',valor:valor,prolabore:true});
     persist('caixa'); fecharModalDirect(); render(); toast('Retirada registrada!','ok');
   };
   window.viewComissoes = function(){
