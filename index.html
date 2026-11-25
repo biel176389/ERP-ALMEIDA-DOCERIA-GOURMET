@@ -754,6 +754,93 @@ console.log("Firebase e Autenticação inicializados com sucesso!");
 .dashboard-v2 .dashboard-heading-kicker{font-weight:700}
 </style>
 
+
+<style id="almeida-ux-foundation">
+/* Fundação visual e responsiva compartilhada entre os módulos */
+#app{min-width:0;overflow-x:clip}
+.main,.content,#content{min-width:0}
+.content{max-width:1440px;margin-inline:auto}
+.top-nav{gap:6px;padding:10px clamp(12px,2vw,28px);scrollbar-width:none}
+.top-nav::-webkit-scrollbar{display:none}
+.top-nav button{min-height:42px;border-radius:10px;transition:background .18s ease,color .18s ease,transform .18s ease}
+.top-nav button:focus-visible,.btn:focus-visible,.icon-btn:focus-visible,.pill-tab:focus-visible{outline:3px solid color-mix(in srgb,var(--wine) 35%,transparent);outline-offset:2px}
+.top-nav button.active{box-shadow:0 2px 7px rgba(58,42,36,.12)}
+.card{min-width:0;transition:border-color .18s ease,box-shadow .18s ease}
+.card-pad{padding:clamp(14px,2vw,22px)}
+.btn{min-height:40px;justify-content:center;transition:filter .16s ease,transform .12s ease,box-shadow .16s ease}
+.btn-primary{box-shadow:0 2px 5px rgba(92,58,38,.13)}
+.btn:active{transform:translateY(1px)}
+.input,select,textarea{min-height:42px;border-radius:10px;transition:border-color .16s ease,box-shadow .16s ease}
+.input:focus,select:focus,textarea:focus{outline:none;border-color:var(--wine);box-shadow:0 0 0 3px color-mix(in srgb,var(--wine) 14%,transparent)}
+textarea{resize:vertical;min-height:88px}
+.table-wrap{max-width:100%;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.table-wrap table{min-width:560px}
+.table-wrap th{position:sticky;top:0;background:var(--surface-2);z-index:1}
+.table-wrap td,.table-wrap th{white-space:normal}
+.modal{overscroll-behavior:contain}
+.modal-backdrop{overscroll-behavior:contain}
+.pill-tabs{max-width:100%}
+.pill-tab{min-height:36px;transition:background .16s ease,color .16s ease}
+.stat,.grid>*{min-width:0}
+img,svg,canvas{max-width:100%}
+@media(max-width:880px){
+ .content{padding:16px 14px max(28px,env(safe-area-inset-bottom))}
+ .top-nav{position:sticky;top:0;z-index:40;padding:8px 10px;gap:5px;scroll-padding-inline:10px;box-shadow:0 2px 10px rgba(40,25,16,.045)}
+ .top-nav button{min-height:42px;padding:9px 12px;font-size:12px}
+ .top-nav .top-nav-spacer{flex:0 0 8px}
+ .topbar{gap:10px;padding:14px 16px}
+ .topbar>div:first-child{min-width:0;flex:1}
+ #topbarActions{min-width:0}
+ .grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .field-row{align-items:stretch}
+ .table-wrap{border-radius:10px}
+ .table-wrap table{min-width:600px}
+ .modal-backdrop{padding:0}
+ .modal{width:100%;max-height:calc(94dvh - env(safe-area-inset-top));border-radius:18px 18px 0 0}
+ .modal-head{padding:15px 17px}
+ .modal-body{padding:16px}
+ .modal-foot{position:sticky;bottom:0;background:var(--surface);padding:12px 16px max(14px,env(safe-area-inset-bottom));flex-wrap:wrap}
+}
+@media(max-width:600px){
+ .content{padding-inline:12px}
+ .topbar{padding:13px 14px}
+ .topbar h1{font-size:18px;line-height:1.25}
+ .topbar .sub{font-size:12px;line-height:1.45}
+ #topbarActions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #topbarActions:empty{display:none}
+ #topbarActions .btn{width:100%;min-width:0;white-space:normal;line-height:1.25}
+ .grid-4,.grid-3,.grid-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .card-pad{padding:14px}
+ .section-title{align-items:flex-start;gap:10px;flex-wrap:wrap}
+ .section-title h2{font-size:16px}
+ .field-row{flex-direction:column;gap:0}
+ .field-row>div{width:100%;min-width:0}
+ .input,select,textarea{font-size:16px!important;min-height:44px}
+ .btn{min-height:42px}
+ .btn-sm{min-height:38px}
+ .table-wrap table{min-width:620px}
+ .modal-foot{justify-content:stretch}
+ .modal-foot .btn{flex:1 1 130px}
+ .toast-wrap{left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){
+ .content{padding-inline:10px}
+ .grid-4,.grid-3,.grid-2{grid-template-columns:minmax(0,1fr)}
+ #topbarActions{grid-template-columns:minmax(0,1fr)}
+ .top-nav button{padding:8px 10px;font-size:11px}
+ .modal-body{padding:14px 12px}
+}
+@media(hover:hover) and (pointer:fine){
+ .card:hover{border-color:color-mix(in srgb,var(--wine) 22%,var(--line))}
+ .btn:not(:disabled):hover{box-shadow:0 3px 10px rgba(58,42,36,.10)}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+
 </head>
 <body>
 
