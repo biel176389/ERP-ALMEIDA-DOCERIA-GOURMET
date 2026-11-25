@@ -1301,69 +1301,73 @@ ${baseConfig.cuidados}
       window.__dash = { dayLabels, dayTotals, dayCustos, dayLucros, dayTicket, dayMargem, topProdutos, vendasManual, vendasBipagem };
 
       return `
-        <section class="dashboard">
-          <header class="dashboard-heading">
-            <div>
-              <div class="dashboard-eyebrow">ALMEIDA DOCERIA GOURMET</div>
+        <section class="dashboard dashboard-v2">
+          <header class="dashboard-hero">
+            <div class="dashboard-hero-copy">
+              <span class="dashboard-eyebrow">ALMEIDA DOCERIA GOURMET</span>
               <h2>Visão geral</h2>
-              <p>Acompanhe os números e o ritmo do seu negócio.</p>
+              <p>Seu negócio em um só olhar.</p>
+              <div class="dashboard-hero-meta"><span class="dashboard-hero-dot"></span> ${fmtDate(hoje)} <span class="dashboard-hero-separator">·</span> Acompanhamento diário</div>
             </div>
-            <div class="dashboard-date"><span class="dashboard-date-dot"></span> ${fmtDate(hoje)}</div>
+            <div class="dashboard-hero-art" aria-hidden="true"><span class="dashboard-hero-orbit"></span><span class="dashboard-hero-heart">♡</span><span class="dashboard-hero-cupcake">✦</span></div>
           </header>
 
-          <div class="dashboard-kpis">
-            <article class="card dashboard-kpi dashboard-kpi-primary">
-              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Faturamento do mês</span><span class="dashboard-kpi-icon">R$</span></div>
+          <div class="dashboard-kpis dashboard-kpis-v2">
+            <article class="dashboard-kpi dashboard-kpi-v2 dashboard-kpi-primary">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Vendas no mês</span><span class="dashboard-kpi-icon">R$</span></div>
               <div class="dashboard-kpi-value">${fmtMoney(faturamentoMes)}</div>
               <div class="dashboard-kpi-foot">${vendasMes.length} venda(s) registradas</div>
             </article>
-            <article class="card dashboard-kpi">
+            <article class="dashboard-kpi dashboard-kpi-v2">
               <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Resultado parcial</span><span class="dashboard-kpi-icon">↗</span></div>
-              <div class="dashboard-kpi-value">${lucroMes === null ? '—' : fmtMoney(lucroMes)}</div>
-              <div class="dashboard-kpi-foot">${custosMesCompletos ? 'Após insumos e comissões' : vendasSemCustoMes + ' venda(s) sem custo completo'}</div>
+              <div class="dashboard-kpi-value">${lucroMes === null ? "—" : fmtMoney(lucroMes)}</div>
+              <div class="dashboard-kpi-foot">${custosMesCompletos ? "Após insumos e comissões" : vendasSemCustoMes + " venda(s) sem custo completo"}</div>
             </article>
-            <article class="card dashboard-kpi">
-              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Itens vendidos hoje</span><span class="dashboard-kpi-icon">✦</span></div>
-              <div class="dashboard-kpi-value">${itensHoje}</div>
-              <div class="dashboard-kpi-foot">${vendasHoje.length} venda(s) hoje</div>
+            <article class="dashboard-kpi dashboard-kpi-v2">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Ticket médio</span><span class="dashboard-kpi-icon">◇</span></div>
+              <div class="dashboard-kpi-value">${vendasMes.length ? fmtMoney(faturamentoMes / vendasMes.length) : fmtMoney(0)}</div>
+              <div class="dashboard-kpi-foot">Valor médio por venda no mês</div>
             </article>
-            <article class="card dashboard-kpi ${alertas ? 'dashboard-kpi-alert' : ''}">
-              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Alertas de estoque</span><span class="dashboard-kpi-icon">!</span></div>
+            <article class="dashboard-kpi dashboard-kpi-v2 ${alertas ? "dashboard-kpi-alert" : ""}">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Estoque em atenção</span><span class="dashboard-kpi-icon">!</span></div>
               <div class="dashboard-kpi-value">${alertas}</div>
               <div class="dashboard-kpi-foot">${lowProdutos} produto(s) · ${lowInsumos} insumo(s)</div>
             </article>
           </div>
 
-          <div class="dashboard-section-heading">
-            <div><h3>Desempenho</h3><p>Indicadores de vendas no período selecionado</p></div>
-          </div>
-          <div class="dashboard-charts">
-            <article class="card dashboard-panel dashboard-panel-main">
-              <div class="dashboard-panel-head"><div><h3>Faturamento</h3><p>Receita registrada em ${lblPer}</p></div>${filtroPeriodoHtml('dash')}</div>
-              <div class="chart-wrap dashboard-chart-tall">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas para acompanhar o faturamento.')}</div>
+          <div class="dashboard-content-grid">
+            <article class="card dashboard-panel dashboard-panel-main dashboard-panel-v2">
+              <div class="dashboard-panel-head"><div><span class="dashboard-panel-kicker">DESEMPENHO</span><h3>Faturamento</h3><p>Receita registrada em ${lblPer}</p></div>${filtroPeriodoHtml("dash")}</div>
+              <div class="chart-wrap dashboard-chart-tall">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock("Sem vendas no período", "Registre vendas para acompanhar o faturamento.")}</div>
             </article>
-            <article class="card dashboard-panel dashboard-panel-products">
-              <div class="dashboard-panel-head"><div><h3>Mais vendidos</h3><p>Quantidade por produto · ${lblPer}</p></div></div>
-              <div class="chart-wrap dashboard-chart-tall">${topProdutos.length ? '<canvas id="chartTop"></canvas>' : emptyBlock('Sem vendas ainda', 'O ranking aparecerá quando houver vendas.')}</div>
-            </article>
-            <article class="card dashboard-panel dashboard-panel-half">
-              <div class="dashboard-panel-head"><div><h3>Faturamento x custos</h3><p>Comparativo diário · ${lblPer}</p></div></div>
-              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para visualizar o comparativo.')}</div>
-            </article>
-            <article class="card dashboard-panel dashboard-panel-half">
-              <div class="dashboard-panel-head"><div><h3>Margem parcial</h3><p>Após insumos e comissões · ${lblPer}</p></div></div>
-              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock('Sem dados no período', 'A margem será calculada com as vendas.')}</div>
-            </article>
-            <article class="card dashboard-panel dashboard-panel-half">
-              <div class="dashboard-panel-head"><div><h3>Ticket médio</h3><p>Valor médio por venda · ${lblPer}</p></div></div>
-              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock('Sem dados no período', 'O ticket médio aparecerá após as vendas.')}</div>
-            </article>
-            <article class="card dashboard-panel dashboard-panel-half">
-              <div class="dashboard-panel-head"><div><h3>Origem das vendas</h3><p>Manual x bipagem · ${lblPer}</p></div></div>
-              <div class="chart-wrap dashboard-chart-origin">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas manuais ou por bipagem.')}</div>
+            <article class="card dashboard-panel dashboard-panel-products dashboard-panel-v2">
+              <div class="dashboard-panel-head"><div><span class="dashboard-panel-kicker">PREFERÊNCIAS</span><h3>Mais vendidos</h3><p>Produtos em destaque</p></div></div>
+              <div class="chart-wrap dashboard-chart-tall">${topProdutos.length ? '<canvas id="chartTop"></canvas>' : emptyBlock("Sem vendas ainda", "O ranking aparecerá quando houver vendas.")}</div>
             </article>
           </div>
-          <div class="dashboard-cost-note">* O resultado apresentado é parcial: considera custos conhecidos de insumos e comissões, sem incluir as demais despesas.</div>
+
+          <details class="dashboard-more">
+            <summary><span><b>Análises complementares</b><small>Custos, margem, ticket médio e origem das vendas</small></span><span class="dashboard-more-toggle">＋</span></summary>
+            <div class="dashboard-extra-grid">
+              <article class="card dashboard-panel dashboard-panel-v2">
+                <div class="dashboard-panel-head"><div><h3>Faturamento x custos</h3><p>Comparativo diário · ${lblPer}</p></div></div>
+                <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock("Sem dados no período", "Registre vendas para visualizar o comparativo.")}</div>
+              </article>
+              <article class="card dashboard-panel dashboard-panel-v2">
+                <div class="dashboard-panel-head"><div><h3>Margem parcial</h3><p>Após insumos e comissões · ${lblPer}</p></div></div>
+                <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock("Sem dados no período", "A margem será calculada com as vendas.")}</div>
+              </article>
+              <article class="card dashboard-panel dashboard-panel-v2">
+                <div class="dashboard-panel-head"><div><h3>Ticket médio</h3><p>Valor médio por venda · ${lblPer}</p></div></div>
+                <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock("Sem dados no período", "O ticket médio aparecerá após as vendas.")}</div>
+              </article>
+              <article class="card dashboard-panel dashboard-panel-v2">
+                <div class="dashboard-panel-head"><div><h3>Origem das vendas</h3><p>Manual x bipagem · ${lblPer}</p></div></div>
+                <div class="chart-wrap dashboard-chart-origin">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock("Sem vendas no período", "Registre vendas manuais ou por bipagem.")}</div>
+              </article>
+            </div>
+          </details>
+          <div class="dashboard-cost-note">* O resultado é parcial: considera custos conhecidos de insumos e comissões, sem incluir as demais despesas. ${itensHoje} item(ns) vendidos hoje.</div>
         </section>
       `;
     }
@@ -4294,46 +4298,56 @@ ${baseConfig.cuidados}
         .planning-foot{font-size:12px;color:var(--muted);line-height:1.5}
         @media(max-width:700px){.planning-summary{grid-template-columns:1fr 1fr}.planning-grid{grid-template-columns:1fr}.planning-panel{padding:15px}}
       
-/* Dashboard: identidade visual Almeida Doceria */
-.dashboard{display:flex;flex-direction:column;gap:22px;max-width:1600px;margin:0 auto}
-.dashboard-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:4px 2px 2px}
-.dashboard-eyebrow{font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--wine);margin-bottom:7px}
-.dashboard-heading h2{font:600 30px 'Fraunces',Georgia,serif;color:var(--ink);letter-spacing:-.025em}
-.dashboard-heading p,.dashboard-section-heading p,.dashboard-panel-head p{margin:4px 0 0;color:var(--muted);font-size:12px}
-.dashboard-date{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
-.dashboard-date-dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
-.dashboard-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-.dashboard-kpi{padding:17px 18px;min-width:0;position:relative;overflow:hidden}
-.dashboard-kpi-primary{background:linear-gradient(135deg,var(--wine-dark),var(--wine));border-color:transparent;color:#fff}
-.dashboard-kpi-primary .dashboard-kpi-label,.dashboard-kpi-primary .dashboard-kpi-foot{color:rgba(255,255,255,.76)}
-.dashboard-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.dashboard-kpi-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.dashboard-kpi-icon{display:grid;place-items:center;width:29px;height:29px;border-radius:9px;background:var(--surface-2);color:var(--wine);font-size:12px;font-weight:800}
-.dashboard-kpi-primary .dashboard-kpi-icon{background:rgba(255,255,255,.14);color:#fff}
-.dashboard-kpi-value{font:600 clamp(22px,2.2vw,29px) 'Fraunces',Georgia,serif;color:var(--ink);margin-top:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dashboard-kpi-primary .dashboard-kpi-value{color:#fff}
-.dashboard-kpi-foot{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}
-.dashboard-kpi-alert .dashboard-kpi-icon{background:var(--red-light);color:var(--red)}
-.dashboard-kpi-alert .dashboard-kpi-value{color:var(--red)}
-.dashboard-section-heading{display:flex;align-items:flex-end;justify-content:space-between;margin:1px 0 -8px}
-.dashboard-section-heading h3{font:600 20px 'Fraunces',Georgia,serif;color:var(--ink)}
-.dashboard-charts{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
-.dashboard-panel{grid-column:span 6;padding:18px;min-width:0}
-.dashboard-panel-main{grid-column:span 8}
-.dashboard-panel-products{grid-column:span 4}
-.dashboard-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-height:42px;margin-bottom:12px}
-.dashboard-panel-head h3{font:600 16px 'Fraunces',Georgia,serif;color:var(--ink)}
-.dashboard-panel-head .pill-tabs{flex-wrap:wrap;justify-content:flex-end}
-.dashboard-panel-head .pill-tab{font-size:10px;padding:6px 9px}
-.dashboard-panel .chart-wrap{height:245px;position:relative}
-.dashboard-panel .dashboard-chart-tall{height:290px}
-.dashboard-panel .dashboard-chart-origin{height:245px}
-.dashboard-cost-note{font-size:10px;color:var(--muted);padding:0 2px;margin-top:-10px}
-:root[data-theme="dark"] .dashboard-kpi-primary{background:linear-gradient(135deg,#69432F,#9A6848)}
-@media(max-width:1050px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-panel-main{grid-column:span 7}.dashboard-panel-products{grid-column:span 5}}
-@media(max-width:760px){.dashboard{gap:16px}.dashboard-heading{align-items:flex-start}.dashboard-heading h2{font-size:26px}.dashboard-date{font-size:10px;padding:7px 9px}.dashboard-kpis{gap:10px}.dashboard-kpi{padding:14px}.dashboard-kpi-value{font-size:22px;margin-top:10px}.dashboard-kpi-label{font-size:9px}.dashboard-kpi-foot{font-size:10px}.dashboard-charts{grid-template-columns:minmax(0,1fr);gap:12px}.dashboard-panel,.dashboard-panel-main,.dashboard-panel-products{grid-column:1;padding:15px}.dashboard-panel-head{flex-direction:column;gap:9px}.dashboard-panel-head>div:last-child{width:100%}.dashboard-panel-head .pill-tabs{justify-content:flex-start;margin-left:0!important}.dashboard-panel .chart-wrap,.dashboard-panel .dashboard-chart-tall,.dashboard-panel .dashboard-chart-origin{height:230px}}
-@media(max-width:380px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dashboard-kpi{padding:12px}.dashboard-kpi-value{font-size:19px}.dashboard-heading h2{font-size:23px}}
-
+/* Dashboard 02: moderno, elegante e com hierarquia visual */
+.dashboard-v2{display:flex;flex-direction:column;gap:18px;max-width:1600px;margin:0 auto}
+.dashboard-hero{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:178px;padding:27px 34px;overflow:hidden;border-radius:20px;background:linear-gradient(112deg,#29170F 0%,#4A2B1C 58%,#70472F 100%);color:#fff;box-shadow:0 12px 28px rgba(54,31,19,.13)}
+.dashboard-hero-copy{position:relative;z-index:2}
+.dashboard-hero .dashboard-eyebrow{color:#D9B58E;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.19em;margin-bottom:12px}
+.dashboard-hero h2{font:600 34px 'Fraunces',Georgia,serif;color:#FFF8EF;letter-spacing:-.025em}
+.dashboard-hero p{margin:5px 0 17px;color:rgba(255,248,239,.76);font-size:13px}
+.dashboard-hero-meta{display:flex;align-items:center;gap:8px;color:#E7CFB5;font-size:11px;font-weight:600}
+.dashboard-hero-dot{width:7px;height:7px;border-radius:50%;background:#D6A46F;box-shadow:0 0 0 4px rgba(214,164,111,.15)}
+.dashboard-hero-separator{opacity:.55}
+.dashboard-hero-art{position:absolute;right:7%;top:50%;transform:translateY(-50%);width:190px;height:150px;display:grid;place-items:center}
+.dashboard-hero-orbit{position:absolute;width:142px;height:142px;border:1px solid rgba(236,203,165,.22);border-radius:50%;box-shadow:0 0 0 18px rgba(236,203,165,.035),0 0 0 38px rgba(236,203,165,.025)}
+.dashboard-hero-heart{position:absolute;right:8px;top:3px;color:#DCA66D;font:64px Georgia,serif;transform:rotate(12deg)}
+.dashboard-hero-cupcake{display:grid;place-items:center;width:92px;height:92px;border-radius:28px 28px 34px 34px;background:linear-gradient(145deg,#D6AD83,#A8754D);color:#4A2B1C;font-size:42px;box-shadow:0 16px 30px rgba(0,0,0,.2);transform:rotate(-8deg)}
+.dashboard-kpis-v2{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.dashboard-kpi-v2{min-width:0;padding:17px 18px;border:1px solid var(--line);border-radius:15px;background:var(--surface);box-shadow:0 5px 18px rgba(61,39,26,.045)}
+.dashboard-kpi-v2 .dashboard-kpi-label{font-size:10px;letter-spacing:.035em;text-transform:none;font-weight:700;color:var(--muted)}
+.dashboard-kpi-v2 .dashboard-kpi-icon{width:31px;height:31px;border-radius:10px;background:var(--surface-2);color:var(--wine);font-size:13px}
+.dashboard-kpi-v2 .dashboard-kpi-value{font:600 clamp(21px,2vw,27px) 'Fraunces',Georgia,serif;margin-top:12px}
+.dashboard-kpi-v2 .dashboard-kpi-foot{font-size:10px;margin-top:5px}
+.dashboard-kpi-v2.dashboard-kpi-primary{background:linear-gradient(135deg,#6B422C,#986747);border-color:transparent}
+.dashboard-kpi-v2.dashboard-kpi-primary .dashboard-kpi-value{color:#fff}
+.dashboard-kpi-v2.dashboard-kpi-primary .dashboard-kpi-label,.dashboard-kpi-v2.dashboard-kpi-primary .dashboard-kpi-foot{color:rgba(255,255,255,.78)}
+.dashboard-kpi-v2.dashboard-kpi-primary .dashboard-kpi-icon{background:rgba(255,255,255,.14);color:#fff}
+.dashboard-content-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:14px}
+.dashboard-panel-v2{padding:19px;border:1px solid var(--line);border-radius:16px;box-shadow:0 5px 18px rgba(61,39,26,.045);min-width:0}
+.dashboard-panel-v2 .dashboard-panel-head{min-height:45px;margin-bottom:13px;align-items:center}
+.dashboard-panel-v2 .dashboard-panel-head h3{font:600 18px 'Fraunces',Georgia,serif;color:var(--ink);margin-top:3px}
+.dashboard-panel-v2 .dashboard-panel-head p{font-size:11px}
+.dashboard-panel-kicker{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--gold)}
+.dashboard-panel-v2 .chart-wrap{height:260px;position:relative}
+.dashboard-panel-v2 .dashboard-chart-tall{height:290px}
+.dashboard-panel-v2 .pill-tab{font-size:10px;padding:6px 9px}
+.dashboard-more{border:1px solid var(--line);border-radius:15px;background:var(--surface);overflow:hidden}
+.dashboard-more summary{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:16px 19px;cursor:pointer;list-style:none}
+.dashboard-more summary::-webkit-details-marker{display:none}
+.dashboard-more summary>span:first-child{display:flex;flex-direction:column;gap:4px}
+.dashboard-more summary b{font:600 15px 'Fraunces',Georgia,serif;color:var(--ink)}
+.dashboard-more summary small{font-size:10px;color:var(--muted)}
+.dashboard-more-toggle{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-2);color:var(--wine);font-size:17px;transition:transform .2s}
+.dashboard-more[open] .dashboard-more-toggle{transform:rotate(45deg)}
+.dashboard-extra-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 14px 14px}
+.dashboard-extra-grid .dashboard-panel-v2 .chart-wrap{height:220px}
+.dashboard-cost-note{font-size:10px;color:var(--muted);padding:0 3px;line-height:1.5}
+:root[data-theme="dark"] .dashboard-hero{background:linear-gradient(112deg,#211713 0%,#38241B 58%,#563824 100%);box-shadow:0 12px 28px rgba(0,0,0,.22)}
+:root[data-theme="dark"] .dashboard-kpi-v2.dashboard-kpi-primary{background:linear-gradient(135deg,#65412E,#895C40)}
+:root[data-theme="dark"] .dashboard-panel-v2,:root[data-theme="dark"] .dashboard-more{box-shadow:none}
+@media(max-width:1050px){.dashboard-kpis-v2{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-content-grid{grid-template-columns:minmax(0,1.4fr) minmax(250px,1fr)}}
+@media(max-width:760px){.dashboard-v2{gap:13px}.dashboard-hero{min-height:150px;padding:22px 20px;border-radius:16px}.dashboard-hero h2{font-size:29px}.dashboard-hero-art{right:-14px;opacity:.62;transform:translateY(-50%) scale(.78)}.dashboard-hero-copy{max-width:70%}.dashboard-kpis-v2{gap:9px}.dashboard-kpi-v2{padding:13px;border-radius:13px}.dashboard-kpi-v2 .dashboard-kpi-value{font-size:20px}.dashboard-content-grid{grid-template-columns:minmax(0,1fr);gap:11px}.dashboard-panel-v2{padding:15px}.dashboard-panel-v2 .dashboard-panel-head{align-items:flex-start;flex-direction:column;gap:9px}.dashboard-panel-v2 .dashboard-panel-head>div:last-child{width:100%}.dashboard-panel-v2 .dashboard-panel-head .pill-tabs{justify-content:flex-start;margin-left:0!important}.dashboard-panel-v2 .chart-wrap,.dashboard-panel-v2 .dashboard-chart-tall{height:235px}.dashboard-extra-grid{grid-template-columns:minmax(0,1fr);padding:0 10px 10px}}
+@media(max-width:380px){.dashboard-hero{padding:18px 16px}.dashboard-hero h2{font-size:25px}.dashboard-hero-art{right:-32px;opacity:.45}.dashboard-kpi-v2{padding:11px}.dashboard-kpi-v2 .dashboard-kpi-value{font-size:18px}.dashboard-kpi-v2 .dashboard-kpi-label{font-size:9px}}
 </style>
       <div class="planning-wrap">
         <div class="planning-head"><div><h2>Planejamento Financeiro</h2><p>Uma visão clara de quanto o negócio gera e como o dinheiro está sendo direcionado.</p></div></div>
