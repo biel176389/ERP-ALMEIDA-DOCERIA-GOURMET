@@ -3419,11 +3419,18 @@ ${baseConfig.cuidados}
             <input type="number" min="0" step="0.01" id="cfgSaldoInicialCaixa" class="input" value="${Number.isFinite(Number(cfg.saldoInicialCaixa)) ? Math.max(0, Number(cfg.saldoInicialCaixa)) : 0}">
             <p class="hint">Informe o dinheiro disponível na data de início do controle. Esse valor compõe o saldo, mas não é faturamento nem lucro. Configure uma única vez para não duplicar o caixa.</p>
           </div>
-          <div class="field" style="max-width:280px;">
-            <label>Percentual da margem por venda destinado ao pró-labore</label>
-            <input type="number" min="0" max="100" step="0.1" id="cfgPctRetirada" class="input" value="${(cfg.pctProlaboreVenda !== undefined && cfg.pctProlaboreVenda !== null && cfg.pctProlaboreVenda !== '' && Number.isFinite(Number(cfg.pctProlaboreVenda))) ? Number(cfg.pctProlaboreVenda) : 0}">
-            <p class="hint">Em cada venda recebida, o ERP calcula a margem após custo dos produtos e comissão. O percentual definido aqui é reservado automaticamente para seu pró-labore. Vendas antigas não serão recalculadas.</p>
+          <div class="divider"></div>
+          <h3>Planejamento Financeiro</h3>
+          <p class="hint">Defina como distribuir a margem das vendas recebidas, depois dos custos dos produtos e das comissões. A soma dos percentuais deve ser de até 100%.</p>
+          <div class="field-row">
+            <div class="field"><label>Capital de giro (%)</label><input type="number" min="0" max="100" step="0.1" id="cfgPctGiro" class="input" value="${Number(cfg.pctCapitalGiro)||0}"></div>
+            <div class="field"><label>Reserva de segurança (%)</label><input type="number" min="0" max="100" step="0.1" id="cfgPctSeguranca" class="input" value="${Number(cfg.pctReservaSeguranca)||0}"></div>
           </div>
+          <div class="field-row">
+            <div class="field"><label>Reserva de expansão (%)</label><input type="number" min="0" max="100" step="0.1" id="cfgPctExpansao" class="input" value="${Number(cfg.pctExpansao)||0}"></div>
+            <div class="field"><label>Pró-labore (%)</label><input type="number" min="0" max="100" step="0.1" id="cfgPctProlabore" class="input" value="${Number(cfg.pctPlanejamentoProlabore ?? cfg.pctProlaboreVenda)||0}"></div>
+          </div>
+          <div class="field" style="max-width:280px;"><label>Meta da reserva de segurança (R$)</label><input type="number" min="0" step="0.01" id="cfgMetaReserva" class="input" value="${Number(cfg.metaReservaSeguranca)||2000}"></div>
           <button class="btn btn-primary" onclick="salvarConfig()">Salvar Configurações</button>
         </div>
       `;
@@ -3433,8 +3440,14 @@ ${baseConfig.cuidados}
       DB.config.nome = document.getElementById('cfgNome').value;
       DB.config.whatsapp = document.getElementById('cfgWhatsapp').value;
       DB.config.instagram = document.getElementById('cfgInstagram').value;
-      const pctEl = document.getElementById('cfgPctRetirada');
-      if (pctEl && Number.isFinite(parseFloat(pctEl.value))) DB.config.pctProlaboreVenda = Math.min(100, Math.max(0, parseFloat(pctEl.value)));
+      const camposPct = ['cfgPctGiro','cfgPctSeguranca','cfgPctExpansao','cfgPctProlabore'];
+      const percentuais = camposPct.map(id => { const el=document.getElementById(id); return el ? Number(el.value) : 0; });
+      if (percentuais.some(v => !Number.isFinite(v) || v < 0 || v > 100)) return toast('Informe percentuais entre 0% e 100%.','err');
+      if (percentuais.reduce((a,b)=>a+b,0) > 100.0001) return toast('A soma da distribuição não pode ultrapassar 100%.','err');
+      [DB.config.pctCapitalGiro,DB.config.pctReservaSeguranca,DB.config.pctExpansao,DB.config.pctPlanejamentoProlabore] = percentuais;
+      DB.config.pctProlaboreVenda = percentuais[3];
+      const metaEl = document.getElementById('cfgMetaReserva');
+      if (metaEl) { const meta=metaEl.value===''?NaN:Number(metaEl.value); if(!Number.isFinite(meta)||meta<0) return toast('Informe uma meta de reserva válida.','err'); DB.config.metaReservaSeguranca=meta; }
       const saldoEl = document.getElementById('cfgSaldoInicialCaixa');
       if (saldoEl) {
         const saldo = saldoEl.value === '' ? NaN : Number(saldoEl.value);
@@ -3502,7 +3515,7 @@ ${baseConfig.cuidados}
   const ROLES = Object.freeze({ ADMIN:'admin', VENDEDOR:'vendedor', VISUALIZADOR:'visualizador' });
   const ROLE_LABELS = { admin:'Administrador', vendedor:'Vendedor', visualizador:'Visualizador' };
   const ROLE_ROUTES = {
-    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','prolabore','config'],
+    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','planejamento','config'],
     vendedor: ['produtos','vendas','bipagem','comissoes'],
     visualizador: ['dashboard','estoque','produtos','producao','bipagem','etiquetas','relatorios']
   };
@@ -3748,7 +3761,7 @@ ${baseConfig.cuidados}
     {id:'etiquetas',label:'Etiquetas',icon:window.iconTicket || (()=>'')},
     {id:'relatorios',label:'Relatórios',icon:window.iconChart || (()=>'')},
     {id:'comissoes',label:'Comissões / Acertos',icon:window.iconCash || (()=>'')},
-    {id:'prolabore',label:'Pró-labore',icon:window.iconCash || (()=>'')},
+    {id:'planejamento',label:'Planejamento Financeiro',icon:window.iconChart || (()=>'')},
     {id:'config',label:'Configurações',icon:window.iconGear || (()=>'')}
   ];
   function allowedNav(){ return ALL_NAV.filter(i=>can(i.id)); }
@@ -3825,7 +3838,7 @@ ${baseConfig.cuidados}
     dashboard:['Painel','Visão operacional do negócio'], estoque:['Estoque & Insumos','Matérias-primas e níveis de estoque'],
     produtos:['Produtos','Consulta de produtos e preços'], producao:['Produção','Lotes produzidos e etiquetas'], vendas:['Vendas','Registre vendas manuais'],
     caixa:['Fluxo de Caixa','Entradas, saídas e saldo do negócio'], bipagem:['Bipagem','Saída rápida de itens por QR Code'], etiquetas:['Etiquetas','Gere e reimprima etiquetas'],
-    relatorios:['Relatórios','Indicadores e desempenho'], comissoes:['Comissões / Acertos','Transparência de ganhos e prestações de contas'], prolabore:['Pró-labore','Retirada por venda e capital de giro'],
+    relatorios:['Relatórios','Indicadores e desempenho'], comissoes:['Comissões / Acertos','Transparência de ganhos e prestações de contas'], planejamento:['Planejamento Financeiro','Organização do dinheiro, reservas e metas'],
     config:['Configurações','Dados da empresa, usuários e comissões']
   };
 
@@ -4188,37 +4201,86 @@ ${baseConfig.cuidados}
     return {lista:lista,atual:meses[mesAtual],estimadoAcum:estimadoAcum,realAcum:ac,retiradoAcum:retiradoAcum,prolaboreRetiradoAcum:prolaboreRetiradoAcum,prolaboreAcumulado:prolaboreAcumulado,pct:pct,liberado:liberado,saldoCaixa:saldoCaixa,disponivel:disponivel,retido:ac-retiradoAcum,aReceber:aReceber,estInsumos:estInsumos,estProdutos:estProdutos,capital:capital};
   }
   window.resumoLucro=resumoLucro;
-  window.cardLucroCapital=function(){
+  // Planejamento Financeiro: leitura consolidada, sem alterar o fluxo de caixa.
+  function resumoPlanejamentoFinanceiro(){
+    const base=resumoLucro();
+    const vendasElegiveis=(DB.vendas||[]).filter(v=>!(window.vendaAguardandoAcerto&&window.vendaAguardandoAcerto(v)));
+    let margem=0, incompletas=0;
+    vendasElegiveis.forEach(v=>{const custo=saleCost(v);if(!Number.isFinite(custo)){incompletas++;return;}margem+=Math.max(0,saleTotal(v)-custo-saleCommission(v));});
+    const cfg=DB.config||{};
+    const pGiro=Math.max(0,Number(cfg.pctCapitalGiro)||0),pSeg=Math.max(0,Number(cfg.pctReservaSeguranca)||0),pExp=Math.max(0,Number(cfg.pctExpansao)||0),pPro=Math.max(0,Number(cfg.pctPlanejamentoProlabore ?? cfg.pctProlaboreVenda)||0);
+    const pctTotal=pGiro+pSeg+pExp+pPro;
+    const saldoPro=Math.max(0,Number(base.prolaboreAcumulado)||0);
+    const saldoCaixa=Number(base.saldoCaixa)||0;
+    const meta=Math.max(0,Number(cfg.metaReservaSeguranca)||2000);
+    const reservaSeguranca=Math.max(0,margem*pSeg/100);
+    return {base,margem,incompletas,pGiro,pSeg,pExp,pPro,pctTotal,meta,reservaSeguranca,capitalGiro:margem*pGiro/100,expansao:margem*pExp/100,prolabore:saldoPro||margem*pPro/100,saldoCaixa,prolaboreDisponivel:base.disponivel};
+  }
+  window.viewPlanejamentoFinanceiro=function(){
     if(!isAdmin()) return '';
-    const r=resumoLucro(); const at=r.atual||{estimado:0,real:0};
-    const verde='#2f7d4f', verm='#b3392f';
-    const card=(rot,val,sub,cor)=>`<div class="card stat"${cor?` style="border:1.5px solid ${cor}"`:''}><div class="label">${rot}</div><div class="value"${cor?` style="color:${cor}"`:''}>${Number.isFinite(val)?fmtMoney(val):'—'}</div><div class="delta">${sub}</div></div>`;
-    const grade='display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px';
-    const linhas=r.lista.slice().reverse().slice(0,12).map(m=>`<tr><td>${m.ym.slice(5)}/${m.ym.slice(0,4)}</td><td>${Number.isFinite(m.estimado)?fmtMoney(m.estimado):'—'}</td><td>${fmtMoney(m.real)}</td><td>${fmtMoney(m.retirado)}</td><td><b>${fmtMoney(m.acumulado)}</b></td></tr>`).join('');
-    return `<div style="margin-top:16px">
-      <div class="section-title" style="margin-top:0"><h2>Pró-labore por venda</h2><span class="hint">${r.pct}% da margem de cada venda recebida · ajuste em Configurações</span></div>
-      <div class="help-note"><b>Cálculo do pró-labore:</b> cada venda recebida gera uma reserva sobre o valor que sobra após o custo dos produtos e a comissão. Vendas de vendedores só entram após o acerto. Se a ficha técnica estiver incompleta, a venda não gera pró-labore até ter custo conhecido. O percentual é configurado em Configurações. <b>Resultado parcial estimado:</b> entradas e saídas registradas, excluindo aportes/empréstimos e retiradas. É uma medida de caixa, não lucro contábil.</div>
-      <div style="${grade}">
-        ${card('Resultado parcial (mês)',at.estimado,Number.isFinite(r.estimadoAcum)?'Acumulado: '+fmtMoney(r.estimadoAcum):'Acumulado indisponível: há mês(es) com custo incompleto')}
-        ${card('Sobra operacional de caixa (mês)',at.real,'Acumulado: '+fmtMoney(r.realAcum),at.real>=0?'':verm)}
-        ${card('Pró-labore acumulado',r.liberado,'Valores reservados automaticamente nas vendas recebidas') }
-        ${card('Já retirado',r.prolaboreRetiradoAcum,'Saques de pró-labore registrados')}
-        ${card('Disponível para saque',r.disponivel,'Após retiradas e limitado ao saldo do caixa ('+fmtMoney(r.saldoCaixa)+')',r.disponivel>0?verde:'')}
-        ${card('Reserva de caixa estimada',r.retido,'Sobra operacional acumulada − retiradas',r.retido>=0?'':verm)}
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:16px"><button class="btn btn-gold" onclick="modalRetirada()">💰 Sacar pró-labore</button></div>
-      <div class="section-title" style="margin-top:0"><h2>Capital de giro estimado</h2><span class="hint">Caixa + a receber + estoques a custo; não deduz contas a pagar</span></div>
-      <div style="${grade}">
-        ${card('Saldo do caixa',r.saldoCaixa,'Dinheiro recebido − saídas')}
-        ${card('A receber de vendedores',r.aReceber,'Repasses pendentes de acerto')}
-        ${card('Estoque de insumos',r.estInsumos,'Estoque × custo unitário')}
-        ${card('Estoque de produtos',r.estProdutos,'Somente produtos com ficha técnica completa')}
-        ${card('Capital de giro estimado',r.capital,'Após retirada sugerida: '+fmtMoney(r.capital-r.disponivel)+' · contas a pagar não cadastradas',r.capital>=0?verde:verm)}
-      </div>
-      <div class="card card-pad" style="margin-bottom:16px"><div class="section-title" style="margin-top:0"><h2>Mês a mês</h2><span class="hint">Últimos 12 meses</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Mês</th><th>Lucro estimado</th><th>Lucro real</th><th>Retirado</th><th>Real acumulado</th></tr></thead><tbody>${linhas}</tbody></table></div>
-      </div>
-    </div>`;
+    const r=resumoPlanejamentoFinanceiro(), b=r.base;
+    const pct=n=>Number(n).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
+    const money=n=>fmtMoney(Number.isFinite(n)?n:0);
+    const progresso=r.meta>0?Math.min(100,r.reservaSeguranca/r.meta*100):0;
+    const item=(nome,valor,percentual,desc)=>`<div class="planning-row"><div><b>${nome}</b><div class="hint">${desc}</div></div><div style="text-align:right"><b>${money(valor)}</b><div class="hint">${pct(percentual)}</div></div></div>`;
+    return `
+      <style>
+        .planning-wrap{max-width:1080px;margin:0 auto;display:grid;gap:18px}
+        .planning-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+        .planning-head h2{margin:0;font-size:20px;color:var(--text)}
+        .planning-head p{margin:5px 0 0;color:var(--muted);font-size:13px}
+        .planning-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+        .planning-metric{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;min-width:0}
+        .planning-metric span{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}
+        .planning-metric strong{font-size:clamp(19px,2.4vw,25px);font-weight:700;letter-spacing:-.5px}
+        .planning-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
+        .planning-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;min-width:0}
+        .planning-panel h3{font-size:15px;margin:0 0 5px}
+        .planning-panel>p{font-size:12px;color:var(--muted);margin:0 0 14px}
+        .planning-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)}
+        .planning-row:last-child{border-bottom:0;padding-bottom:0}
+        .planning-row b{font-size:13px}.planning-row .hint{font-size:11px;margin-top:3px}
+        .planning-progress{height:8px;background:var(--border);border-radius:20px;overflow:hidden;margin:12px 0 7px}
+        .planning-progress>div{height:100%;background:var(--accent,#8B5A3C);border-radius:20px}
+        .planning-foot{font-size:12px;color:var(--muted);line-height:1.5}
+        @media(max-width:700px){.planning-summary{grid-template-columns:1fr 1fr}.planning-grid{grid-template-columns:1fr}.planning-panel{padding:15px}}
+      </style>
+      <div class="planning-wrap">
+        <div class="planning-head"><div><h2>Planejamento Financeiro</h2><p>Uma visão clara de quanto o negócio gera e como o dinheiro está sendo direcionado.</p></div><button class="btn btn-primary" onclick="setRoute('config')">Ajustar distribuição</button></div>
+        <div class="planning-summary">
+          <div class="planning-metric"><span>Saldo atual em caixa</span><strong>${money(r.saldoCaixa)}</strong></div>
+          <div class="planning-metric"><span>Margem acumulada elegível</span><strong>${money(r.margem)}</strong></div>
+          <div class="planning-metric"><span>Pró-labore disponível</span><strong>${money(r.prolaboreDisponivel)}</strong></div>
+        </div>
+        <div class="planning-grid">
+          <section class="planning-panel"><h3>Distribuição planejada</h3><p>Valores calculados sobre a margem das vendas recebidas, após custos e comissões.</p>
+            ${item('Capital de giro',r.capitalGiro,r.pGiro,'Recursos para manter a operação')}
+            ${item('Reserva de segurança',r.reservaSeguranca,r.pSeg,'Proteção para imprevistos e períodos fracos')}
+            ${item('Reserva de expansão',r.expansao,r.pExp,'Novos produtos, equipamentos e crescimento')}
+            ${item('Pró-labore',r.prolabore,r.pPro,'Retirada pessoal acumulada')}
+            <div class="planning-row"><b>Total distribuído</b><b>${money(r.margem*r.pctTotal/100)} · ${pct(r.pctTotal)}</b></div>
+          </section>
+          <section class="planning-panel"><h3>Meta da reserva</h3><p>Primeiro objetivo: formar uma reserva de segurança de ${money(r.meta)}.</p>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><strong style="font-size:24px">${money(r.reservaSeguranca)}</strong><span class="hint">${pct(progresso)} da meta</span></div>
+            <div class="planning-progress"><div style="width:${progresso}%"></div></div>
+            <div class="planning-foot">${money(Math.max(0,r.meta-r.reservaSeguranca))} restantes para atingir a meta.</div>
+            <div class="divider" style="margin:16px 0"></div>
+            <h3>Pró-labore</h3><p>Acumulado conforme vendas recebidas e acertos dos vendedores.</p>
+            <div class="planning-row"><span>Acumulado</span><b>${money(b.prolaboreAcumulado)}</b></div>
+            <div class="planning-row"><span>Já retirado</span><b>${money(b.prolaboreRetiradoAcum)}</b></div>
+            <div class="planning-row"><span>Disponível para saque</span><b>${money(b.disponivel)}</b></div>
+            <div style="margin-top:14px"><button class="btn btn-primary" onclick="modalRetirada()">Registrar retirada</button></div>
+          </section>
+        </div>
+        <div class="planning-panel"><h3>Capital de giro estimado</h3><p>Visão patrimonial operacional. Estoques e valores a receber não são dinheiro disponível em caixa.</p>
+          ${item('Caixa',b.saldoCaixa,0,'Saldo registrado no fluxo de caixa')}
+          ${item('A receber de vendedores',b.aReceber,0,'Vendas aguardando acerto')}
+          ${item('Estoque de insumos',b.estInsumos,0,'Quantidade em estoque × custo unitário')}
+          ${item('Estoque de produtos',b.estProdutos,0,'Produtos com ficha técnica completa')}
+          <div class="planning-row"><b>Capital de giro estimado</b><b>${money(b.capital)}</b></div>
+        </div>
+        <p class="planning-foot">Distribuições são reservas gerenciais, não lançamentos de despesa nem transferências bancárias. Compras continuam registradas no Fluxo de Caixa. ${r.incompletas?'⚠ '+r.incompletas+' venda(s) com custo incompleto ficaram fora do cálculo da margem.':''} Os percentuais são definidos em Configurações.</p>
+      </div>`;
   };
   window.modalRetirada=function(){
     if(!isAdmin()) return toast('Ação disponível somente para o administrador.','err');
@@ -4315,7 +4377,7 @@ ${baseConfig.cuidados}
     else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
     else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
     else if(ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
-    else if(ROUTE==='prolabore') c.innerHTML=window.cardLucroCapital();
+    else if(ROUTE==='planejamento') c.innerHTML=window.viewPlanejamentoFinanceiro();
     else if(ROUTE==='config') c.innerHTML=window.viewConfig() + (isAdmin() ? await window.viewUsuarios() : '');
   };
 
