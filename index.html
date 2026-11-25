@@ -1274,6 +1274,7 @@ ${baseConfig.cuidados}
       const itensHoje = vendasHoje.reduce((s, v) => s + (Array.isArray(v.itens) ? v.itens : []).reduce((a, i) => a + (Number(i && i.qty) || 0), 0), 0);
       const lowInsumos = DB.insumos.filter(insumoLowStock).length;
       const lowProdutos = DB.produtos.filter(produtoLowStock).length;
+      const alertas = lowInsumos + lowProdutos;
 
       const days = periodDaysFiltro(PERIODO.dash, minDataVendas());
       const lblPer = periodoLabel(PERIODO.dash, days);
@@ -1292,7 +1293,6 @@ ${baseConfig.cuidados}
       const vendasPeriodoFlat = vendasPorDia.flat();
       const vendasBipagem = vendasPeriodoFlat.filter(v => v.origem === 'bipagem').length;
       const vendasManual = vendasPeriodoFlat.length - vendasBipagem;
-
       const porProduto = {};
       vendasPeriodoFlat.forEach(v => (v.itens || []).forEach(it => { porProduto[it.produtoId] = (porProduto[it.produtoId] || 0) + (Number(it.qty) || 0); }));
       const topProdutos = Object.entries(porProduto).sort((a, b) => b[1] - a[1]).slice(0, 5)
@@ -1301,48 +1301,70 @@ ${baseConfig.cuidados}
       window.__dash = { dayLabels, dayTotals, dayCustos, dayLucros, dayTicket, dayMargem, topProdutos, vendasManual, vendasBipagem };
 
       return `
-      <div class="grid grid-4">
-        <div class="card stat"><div class="label">Faturamento (mês)</div><div class="value">${fmtMoney(faturamentoMes)}</div><div class="delta">${vendasMes.length} venda(s) no mês</div></div>
-        <div class="card stat"><div class="label">Resultado parcial (mês)</div><div class="value">${lucroMes === null ? '—' : fmtMoney(lucroMes)}</div><div class="delta">${custosMesCompletos ? 'Insumos: ' + fmtMoney(custoMes) : 'Custo conhecido: ' + fmtMoney(custoMes) + ' · ' + vendasSemCustoMes + ' venda(s) sem custo completo'} · comissões: ${fmtMoney(comissaoMes)}. Não inclui as demais despesas.</div></div>
-        <div class="card stat"><div class="label">Itens vendidos hoje</div><div class="value">${itensHoje}</div><div class="delta">${vendasHoje.length} venda(s) hoje</div></div>
-        <div class="card stat"><div class="label">Alertas de estoque</div><div class="value">${lowInsumos+lowProdutos}</div><div class="delta ${(lowInsumos+lowProdutos)?'down':''}">${lowProdutos} produto(s) · ${lowInsumos} insumo(s)</div></div>
-      </div>
+        <section class="dashboard">
+          <header class="dashboard-heading">
+            <div>
+              <div class="dashboard-eyebrow">ALMEIDA DOCERIA GOURMET</div>
+              <h2>Visão geral</h2>
+              <p>Acompanhe os números e o ritmo do seu negócio.</p>
+            </div>
+            <div class="dashboard-date"><span class="dashboard-date-dot"></span> ${fmtDate(hoje)}</div>
+          </header>
 
-      <div class="grid grid-2" style="margin-top:16px;">
-        <div class="card card-pad">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-            <h3 style="font-size:15px;margin:0;">Faturamento — ${lblPer}</h3>
-            ${filtroPeriodoHtml('dash')}
+          <div class="dashboard-kpis">
+            <article class="card dashboard-kpi dashboard-kpi-primary">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Faturamento do mês</span><span class="dashboard-kpi-icon">R$</span></div>
+              <div class="dashboard-kpi-value">${fmtMoney(faturamentoMes)}</div>
+              <div class="dashboard-kpi-foot">${vendasMes.length} venda(s) registradas</div>
+            </article>
+            <article class="card dashboard-kpi">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Resultado parcial</span><span class="dashboard-kpi-icon">↗</span></div>
+              <div class="dashboard-kpi-value">${lucroMes === null ? '—' : fmtMoney(lucroMes)}</div>
+              <div class="dashboard-kpi-foot">${custosMesCompletos ? 'Após insumos e comissões' : vendasSemCustoMes + ' venda(s) sem custo completo'}</div>
+            </article>
+            <article class="card dashboard-kpi">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Itens vendidos hoje</span><span class="dashboard-kpi-icon">✦</span></div>
+              <div class="dashboard-kpi-value">${itensHoje}</div>
+              <div class="dashboard-kpi-foot">${vendasHoje.length} venda(s) hoje</div>
+            </article>
+            <article class="card dashboard-kpi ${alertas ? 'dashboard-kpi-alert' : ''}">
+              <div class="dashboard-kpi-top"><span class="dashboard-kpi-label">Alertas de estoque</span><span class="dashboard-kpi-icon">!</span></div>
+              <div class="dashboard-kpi-value">${alertas}</div>
+              <div class="dashboard-kpi-foot">${lowProdutos} produto(s) · ${lowInsumos} insumo(s)</div>
+            </article>
           </div>
-          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas para ver o faturamento aqui.')}</div>
-        </div>
-        <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Produtos mais vendidos</h3>
-          <div class="chart-wrap">${topProdutos.length? '<canvas id="chartTop"></canvas>' : emptyBlock('Sem vendas ainda','Registre vendas para ver o ranking aqui.')}</div>
-        </div>
-      </div>
 
-      <div class="grid grid-2" style="margin-top:16px;">
-        <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Faturamento x Custo conhecido x Resultado parcial (${lblPer})</h3>
-          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para comparar faturamento, custo e lucro.')}</div>
-        </div>
-        <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Margem parcial após insumos e comissões (${lblPer})</h3>
-          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular a margem.')}</div>
-        </div>
-      </div>
-
-      <div class="grid grid-2" style="margin-top:16px;">
-        <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Ticket médio (${lblPer})</h3>
-          <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para calcular o ticket médio.')}</div>
-        </div>
-        <div class="card card-pad">
-          <h3 style="font-size:15px;margin-bottom:12px;">Vendas por origem (${lblPer})</h3>
-          <div class="chart-wrap sm">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas manuais ou por bipagem.')}</div>
-        </div>
-      </div>
+          <div class="dashboard-section-heading">
+            <div><h3>Desempenho</h3><p>Indicadores de vendas no período selecionado</p></div>
+          </div>
+          <div class="dashboard-charts">
+            <article class="card dashboard-panel dashboard-panel-main">
+              <div class="dashboard-panel-head"><div><h3>Faturamento</h3><p>Receita registrada em ${lblPer}</p></div>${filtroPeriodoHtml('dash')}</div>
+              <div class="chart-wrap dashboard-chart-tall">${temVendasPeriodo ? '<canvas id="chartFat"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas para acompanhar o faturamento.')}</div>
+            </article>
+            <article class="card dashboard-panel dashboard-panel-products">
+              <div class="dashboard-panel-head"><div><h3>Mais vendidos</h3><p>Quantidade por produto · ${lblPer}</p></div></div>
+              <div class="chart-wrap dashboard-chart-tall">${topProdutos.length ? '<canvas id="chartTop"></canvas>' : emptyBlock('Sem vendas ainda', 'O ranking aparecerá quando houver vendas.')}</div>
+            </article>
+            <article class="card dashboard-panel dashboard-panel-half">
+              <div class="dashboard-panel-head"><div><h3>Faturamento x custos</h3><p>Comparativo diário · ${lblPer}</p></div></div>
+              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartFCL"></canvas>' : emptyBlock('Sem dados no período', 'Registre vendas para visualizar o comparativo.')}</div>
+            </article>
+            <article class="card dashboard-panel dashboard-panel-half">
+              <div class="dashboard-panel-head"><div><h3>Margem parcial</h3><p>Após insumos e comissões · ${lblPer}</p></div></div>
+              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartMargem"></canvas>' : emptyBlock('Sem dados no período', 'A margem será calculada com as vendas.')}</div>
+            </article>
+            <article class="card dashboard-panel dashboard-panel-half">
+              <div class="dashboard-panel-head"><div><h3>Ticket médio</h3><p>Valor médio por venda · ${lblPer}</p></div></div>
+              <div class="chart-wrap">${temVendasPeriodo ? '<canvas id="chartTicket"></canvas>' : emptyBlock('Sem dados no período', 'O ticket médio aparecerá após as vendas.')}</div>
+            </article>
+            <article class="card dashboard-panel dashboard-panel-half">
+              <div class="dashboard-panel-head"><div><h3>Origem das vendas</h3><p>Manual x bipagem · ${lblPer}</p></div></div>
+              <div class="chart-wrap dashboard-chart-origin">${(vendasManual + vendasBipagem) ? '<canvas id="chartOrigem"></canvas>' : emptyBlock('Sem vendas no período', 'Registre vendas manuais ou por bipagem.')}</div>
+            </article>
+          </div>
+          <div class="dashboard-cost-note">* O resultado apresentado é parcial: considera custos conhecidos de insumos e comissões, sem incluir as demais despesas.</div>
+        </section>
       `;
     }
 
@@ -4271,7 +4293,48 @@ ${baseConfig.cuidados}
         .planning-progress>div{height:100%;background:var(--accent,#8B5A3C);border-radius:20px}
         .planning-foot{font-size:12px;color:var(--muted);line-height:1.5}
         @media(max-width:700px){.planning-summary{grid-template-columns:1fr 1fr}.planning-grid{grid-template-columns:1fr}.planning-panel{padding:15px}}
-      </style>
+      
+/* Dashboard: identidade visual Almeida Doceria */
+.dashboard{display:flex;flex-direction:column;gap:22px;max-width:1600px;margin:0 auto}
+.dashboard-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:4px 2px 2px}
+.dashboard-eyebrow{font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--wine);margin-bottom:7px}
+.dashboard-heading h2{font:600 30px 'Fraunces',Georgia,serif;color:var(--ink);letter-spacing:-.025em}
+.dashboard-heading p,.dashboard-section-heading p,.dashboard-panel-head p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.dashboard-date{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
+.dashboard-date-dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.dashboard-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.dashboard-kpi{padding:17px 18px;min-width:0;position:relative;overflow:hidden}
+.dashboard-kpi-primary{background:linear-gradient(135deg,var(--wine-dark),var(--wine));border-color:transparent;color:#fff}
+.dashboard-kpi-primary .dashboard-kpi-label,.dashboard-kpi-primary .dashboard-kpi-foot{color:rgba(255,255,255,.76)}
+.dashboard-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dashboard-kpi-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.dashboard-kpi-icon{display:grid;place-items:center;width:29px;height:29px;border-radius:9px;background:var(--surface-2);color:var(--wine);font-size:12px;font-weight:800}
+.dashboard-kpi-primary .dashboard-kpi-icon{background:rgba(255,255,255,.14);color:#fff}
+.dashboard-kpi-value{font:600 clamp(22px,2.2vw,29px) 'Fraunces',Georgia,serif;color:var(--ink);margin-top:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dashboard-kpi-primary .dashboard-kpi-value{color:#fff}
+.dashboard-kpi-foot{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}
+.dashboard-kpi-alert .dashboard-kpi-icon{background:var(--red-light);color:var(--red)}
+.dashboard-kpi-alert .dashboard-kpi-value{color:var(--red)}
+.dashboard-section-heading{display:flex;align-items:flex-end;justify-content:space-between;margin:1px 0 -8px}
+.dashboard-section-heading h3{font:600 20px 'Fraunces',Georgia,serif;color:var(--ink)}
+.dashboard-charts{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.dashboard-panel{grid-column:span 6;padding:18px;min-width:0}
+.dashboard-panel-main{grid-column:span 8}
+.dashboard-panel-products{grid-column:span 4}
+.dashboard-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-height:42px;margin-bottom:12px}
+.dashboard-panel-head h3{font:600 16px 'Fraunces',Georgia,serif;color:var(--ink)}
+.dashboard-panel-head .pill-tabs{flex-wrap:wrap;justify-content:flex-end}
+.dashboard-panel-head .pill-tab{font-size:10px;padding:6px 9px}
+.dashboard-panel .chart-wrap{height:245px;position:relative}
+.dashboard-panel .dashboard-chart-tall{height:290px}
+.dashboard-panel .dashboard-chart-origin{height:245px}
+.dashboard-cost-note{font-size:10px;color:var(--muted);padding:0 2px;margin-top:-10px}
+:root[data-theme="dark"] .dashboard-kpi-primary{background:linear-gradient(135deg,#69432F,#9A6848)}
+@media(max-width:1050px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-panel-main{grid-column:span 7}.dashboard-panel-products{grid-column:span 5}}
+@media(max-width:760px){.dashboard{gap:16px}.dashboard-heading{align-items:flex-start}.dashboard-heading h2{font-size:26px}.dashboard-date{font-size:10px;padding:7px 9px}.dashboard-kpis{gap:10px}.dashboard-kpi{padding:14px}.dashboard-kpi-value{font-size:22px;margin-top:10px}.dashboard-kpi-label{font-size:9px}.dashboard-kpi-foot{font-size:10px}.dashboard-charts{grid-template-columns:minmax(0,1fr);gap:12px}.dashboard-panel,.dashboard-panel-main,.dashboard-panel-products{grid-column:1;padding:15px}.dashboard-panel-head{flex-direction:column;gap:9px}.dashboard-panel-head>div:last-child{width:100%}.dashboard-panel-head .pill-tabs{justify-content:flex-start;margin-left:0!important}.dashboard-panel .chart-wrap,.dashboard-panel .dashboard-chart-tall,.dashboard-panel .dashboard-chart-origin{height:230px}}
+@media(max-width:380px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dashboard-kpi{padding:12px}.dashboard-kpi-value{font-size:19px}.dashboard-heading h2{font-size:23px}}
+
+</style>
       <div class="planning-wrap">
         <div class="planning-head"><div><h2>Planejamento Financeiro</h2><p>Uma visão clara de quanto o negócio gera e como o dinheiro está sendo direcionado.</p></div></div>
         <div class="planning-summary">
