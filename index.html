@@ -1070,7 +1070,7 @@ ${baseConfig.cuidados}
       { id: 'produtos', label: 'Produtos', icon: iconTag },
       { id: 'producao', label: 'Produção', icon: iconBox },
       { id: 'vendas', label: 'Vendas', icon: iconCart },
-      { id: 'caixa', label: 'Fluxo de Caixa', icon: iconCash },
+      
       { id: 'bipagem', label: 'Bipagem', icon: iconScan },
       { id: 'etiquetas', label: 'Etiquetas', icon: iconTicket },
       { id: 'relatorios', label: 'Relatórios', icon: iconChart },
@@ -1128,7 +1128,7 @@ ${baseConfig.cuidados}
       produtos: ['Produtos', 'Cadastro de itens e fichas técnicas'],
       producao: ['Produção', 'Registre lotes produzidos e gere etiquetas'],
       vendas: ['Vendas', 'Registre vendas por bipagem ou manualmente'],
-      caixa: ['Fluxo de Caixa', 'Entradas, saídas e saldo do seu negócio'],
+      
       bipagem: ['Bipagem', 'Saída rápida de itens por QR Code'],
       etiquetas: ['Etiquetas', 'Gere e reimprima etiquetas com QR Code'],
       relatorios: ['Relatórios', 'Faturamento, consumo e desempenho'],
@@ -1164,12 +1164,7 @@ ${baseConfig.cuidados}
         actions.innerHTML = `<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`;
         c.innerHTML = viewVendas();
       }
-      else if (ROUTE === 'caixa') {
-        actions.innerHTML = `<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`;
-        c.innerHTML = viewCaixa();
-        renderCaixaCharts();
-      }
-      else if (ROUTE === 'bipagem') c.innerHTML = viewBipagem();
+            else if (ROUTE === 'bipagem') c.innerHTML = viewBipagem();
       else if (ROUTE === 'etiquetas') c.innerHTML = viewEtiquetas();
       else if (ROUTE === 'relatorios') c.innerHTML = viewRelatorios();
       else if (ROUTE === 'config') c.innerHTML = viewConfig();
@@ -1199,7 +1194,7 @@ ${baseConfig.cuidados}
 
     // ---------- Filtro de período compartilhado (Dashboard e Caixa) ----------
     const FILTROS_PERIODO = [['hoje','Hoje'],['7','7 dias'],['30','1 Mês'],['custom','Personalizado']];
-    const PERIODO = { dash: { f: '7', de: '', ate: '' }, caixa: { f: '30', de: '', ate: '' } };
+    const PERIODO = { dash: { f: '7', de: '', ate: '' }, caixa: { f: '30', de: '', ate: '' }, relatorios: { f: 'mes', de: '', ate: '' } };
     const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     function periodDaysFiltro(st, minData) {
       const hoje = todayISO(); let ini = hoje, fim = hoje; const f = st.f;
@@ -3370,7 +3365,8 @@ ${baseConfig.cuidados}
         caixa:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h10v2M15 14h3"/></svg>',
         despesas:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 2h8v14H4z"/><path d="M8 12h8M8 16h5"/></svg>'
       };
-      const nav = '<div class="card card-pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">Central de relatórios</h3><p class="hint" style="margin:5px 0 0">Selecione um relatório para abrir sua janela · '+esc(label)+'</p></div>'+filtroPeriodoHtml('relatorios')+'</div><div class="relatorio-secoes-grid">'+tabs.map(t => '<button type="button" class="card relatorio-secao-btn" onclick="setRelatorioSecao(\''+t[0]+'\')" style="aspect-ratio:1/1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center;cursor:pointer;border:1px solid var(--border);background:var(--surface);transition:border-color .15s,background .15s" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'var(--border)\'"><span style="width:42px;height:42px;display:grid;place-items:center;color:var(--primary)">'+iconesSecao[t[0]].replace('<svg','<svg style="width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"')+'</span><b style="font-size:14px;color:var(--text)">'+t[1]+'</b><span class="hint" style="font-size:11px">'+t[2]+'</span></button>').join('')+'</div></div>';
+      const filtroRelatorio = '<div class="caixa-filtro"><details><summary>Ver período</summary><div class="caixa-filtro-opcoes">'+filtroPeriodoHtml('relatorios')+'<div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:right">'+esc(label)+'</div></div></details></div>';
+      const nav = '<style>.caixa-filtro details{position:relative}.caixa-filtro summary{cursor:pointer;list-style:none;color:var(--wine);font-size:12px;white-space:nowrap}.caixa-filtro summary::-webkit-details-marker{display:none}.caixa-filtro summary:after{content:"⌄";margin-left:5px}.caixa-filtro details[open] .caixa-filtro-opcoes{position:absolute;right:0;top:24px;z-index:130;min-width:min(92vw,390px);padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}.caixa-filtro .pill-tabs{display:flex;flex-wrap:wrap;gap:6px}.caixa-filtro .pill-tab{font-size:11px;padding:6px 9px}.caixa-filtro .input{font-size:12px}@media(max-width:600px){.caixa-filtro details[open] .caixa-filtro-opcoes{right:-4px}}</style><div class="card card-pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">Central de relatórios</h3><p class="hint" style="margin:5px 0 0">Selecione um relatório para abrir sua janela · '+esc(label)+'</p></div>'+filtroRelatorio+'</div><div class="relatorio-secoes-grid">'+tabs.map(t => '<button type="button" class="card relatorio-secao-btn" onclick="setRelatorioSecao(\''+t[0]+'\')" style="aspect-ratio:1/1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center;cursor:pointer;border:1px solid var(--border);background:var(--surface);transition:border-color .15s,background .15s" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'var(--border)\'"><span style="width:42px;height:42px;display:grid;place-items:center;color:var(--primary)">'+iconesSecao[t[0]].replace('<svg','<svg style="width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"')+'</span><b style="font-size:14px;color:var(--text)">'+t[1]+'</b><span class="hint" style="font-size:11px">'+t[2]+'</span></button>').join('')+'</div></div>';
       const mini = (nome, valor, desc) => '<div class="card stat"><div class="label">'+nome+'</div><div class="value">'+valor+'</div><div class="delta">'+desc+'</div></div>';
       const dre = '<div class="card card-pad"><h3>Demonstração do resultado gerencial</h3><table class="table"><tbody><tr><td>Receita bruta</td><td style="text-align:right">'+fmtMoney(receita)+'</td></tr><tr><td>(−) Custo dos produtos vendidos</td><td style="text-align:right">'+fmt(cmv)+'</td></tr><tr><td><b>Lucro bruto</b></td><td style="text-align:right"><b>'+fmt(lucroBruto)+'</b></td></tr><tr><td>(−) Comissões de venda</td><td style="text-align:right">'+fmtMoney(comissoes)+'</td></tr><tr><td>(−) Despesas operacionais registradas</td><td style="text-align:right">'+fmtMoney(despOper)+'</td></tr><tr><td><b>Resultado gerencial</b></td><td style="text-align:right"><b>'+fmt(resultado)+'</b></td></tr></tbody></table><p class="hint">Compras de insumos e embalagens aparecem no caixa como aquisição de estoque. O consumo dos materiais compõe o CMV pela ficha técnica, sem duplicar a despesa.</p></div>';
       let detalhe = '';
@@ -3382,8 +3378,8 @@ ${baseConfig.cuidados}
       } else if (secao === 'custos') {
         detalhe = '<div class="grid grid-4">'+mini('CMV',fmt(cmv),'Custo dos itens vendidos')+mini('Lucro bruto',fmt(lucroBruto),'Receita menos CMV')+mini('Margem líquida',pct(margem),'Resultado / receita')+mini('Contribuição',fmt(contribuicao),'Receita menos CMV e comissões')+'</div><div class="grid grid-2" style="margin-top:14px">'+dre+'<div class="card card-pad"><h3>Ponto de equilíbrio</h3><div class="value">'+(pe===null?'—':pe+' unidades')+'</div><p class="hint">Cálculo: despesas operacionais ÷ contribuição média por unidade. A contribuição média considera faturamento menos CMV e comissões, dividido pelas unidades vendidas.</p><p><b>Despesas usadas no cálculo:</b> '+fmtMoney(despOper)+'</p><p><b>Contribuição média por unidade:</b> '+fmt(contribuicaoUn || null)+'</p><p class="hint">É uma estimativa gerencial. O ERP ainda não classifica formalmente despesas fixas e variáveis.</p></div></div>';
       } else if (secao === 'caixa') {
-        const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td></tr>').join('');
-        detalhe = '<div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="4">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div>';
+        const linhas = lanc.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(l=>'<tr><td>'+esc(fmtDate(l.data))+'</td><td>'+esc(l.tipo||'')+'</td><td>'+esc(l.categoria||'')+'</td><td style="text-align:right">'+fmtMoney(Number(l.valor||0))+'</td><td>'+ (l.origem==='manual' ? '<button class="btn btn-secondary btn-sm" onclick="modalCaixa(\''+esc(l.id)+'\')">Editar</button> <button class="btn btn-secondary btn-sm" onclick="deletarCaixa(\''+esc(l.id)+'\')">Excluir</button>' : '<span class="hint">Automático</span>') +'</td></tr>').join('');
+        detalhe = '<div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button class="btn btn-primary" onclick="modalCaixa()">+ Novo lançamento</button></div><div class="grid grid-4">'+mini('Saldo inicial',fmtMoney(saldoInicial),'Antes do período')+mini('Entradas',fmtMoney(entradas),'Movimentações positivas')+mini('Saídas',fmtMoney(saidas),'Movimentações negativas')+mini('Saldo final',fmtMoney(saldoFinal),'Saldo inicial + entradas − saídas')+'</div><div class="card card-pad" style="margin-top:14px"><h3>Extrato do período</h3><div class="table-wrap"><table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Valor</th><th>Ações</th></tr></thead><tbody>'+(linhas||'<tr><td colspan="5">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div></div>';
       } else if (secao === 'despesas') {
         const grupos={}; despesas.forEach(l=>{const k=l.categoria||'Sem categoria';grupos[k]=(grupos[k]||0)+Number(l.valor||0);});
         const linhas=Object.entries(grupos).sort((a,b)=>b[1]-a[1]).map(x=>'<tr><td>'+esc(x[0])+'</td><td style="text-align:right">'+fmtMoney(x[1])+'</td><td style="text-align:right">'+(despOper?((x[1]/despOper)*100).toFixed(1).replace('.',',')+'%':'0,0%')+'</td></tr>').join('');
@@ -3391,7 +3387,7 @@ ${baseConfig.cuidados}
       }
       if (!window.RELATORIO_MODAL) return nav + aviso;
       const tituloSecao = (tabs.find(t=>t[0]===secao)||tabs[0]);
-      const modal = '<div class="modal-backdrop" onclick="if(event.target===this)fecharRelatorioSecao()" style="z-index:120"><div class="modal relatorio-modal"><div class="modal-head"><div><h3 style="margin:0">'+tituloSecao[1]+'</h3><p class="hint" style="margin:4px 0 0">'+esc(label)+'</p></div><button class="modal-close" aria-label="Fechar" onclick="fecharRelatorioSecao()">×</button></div><div class="modal-body">'+aviso+detalhe+'</div></div></div>';
+      const modal = '<div class="modal-backdrop" onclick="if(event.target===this)fecharRelatorioSecao()" style="z-index:120"><div class="modal relatorio-modal"><div class="modal-head"><div><h3 style="margin:0">'+tituloSecao[1]+'</h3><p class="hint" style="margin:4px 0 8px">'+esc(label)+'</p>'+filtroRelatorio+'</div><button class="modal-close" aria-label="Fechar" onclick="fecharRelatorioSecao()">×</button></div><div class="modal-body">'+aviso+detalhe+'</div></div></div>';
       return nav + modal;
     }
     function viewConfig() {
@@ -3515,7 +3511,7 @@ ${baseConfig.cuidados}
   const ROLES = Object.freeze({ ADMIN:'admin', VENDEDOR:'vendedor', VISUALIZADOR:'visualizador' });
   const ROLE_LABELS = { admin:'Administrador', vendedor:'Vendedor', visualizador:'Visualizador' };
   const ROLE_ROUTES = {
-    admin: ['dashboard','estoque','produtos','producao','vendas','caixa','bipagem','etiquetas','relatorios','comissoes','planejamento','config'],
+    admin: ['dashboard','estoque','produtos','producao','vendas','bipagem','etiquetas','relatorios','comissoes','planejamento','config'],
     vendedor: ['produtos','vendas','bipagem','comissoes'],
     visualizador: ['dashboard','estoque','produtos','producao','bipagem','etiquetas','relatorios']
   };
@@ -4372,8 +4368,7 @@ ${baseConfig.cuidados}
     else if(ROUTE==='produtos'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProduto()">+ Novo Produto</button>`; c.innerHTML=window.viewProdutos(); }
     else if(ROUTE==='producao'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalProducao()">+ Nova Produção</button>`; c.innerHTML=window.viewProducao(); }
     else if(ROUTE==='vendas'){ if(isAdmin()||isSeller()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalVenda()">+ Nova Venda Manual</button>`; c.innerHTML=window.viewVendas(); }
-    else if(ROUTE==='caixa'){ if(isAdmin()) actions.innerHTML=`<button class="btn btn-primary" onclick="modalCaixa()">+ Novo Lançamento</button>`; c.innerHTML=window.viewCaixa(); }
-    else if(ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
+        else if(ROUTE==='bipagem') c.innerHTML=window.viewBipagem();
     else if(ROUTE==='etiquetas') c.innerHTML=window.viewEtiquetas();
     else if(ROUTE==='relatorios') c.innerHTML=window.viewRelatorios();
     else if(ROUTE==='comissoes') { if(isAdmin() && !window.__usersCache.length) await carregarUsuarios(); c.innerHTML=window.viewComissoes(); }
@@ -4408,6 +4403,29 @@ ${baseConfig.cuidados}
 
   window.__rbacRoleText = ()=>ROLE_LABELS[window.currentUserRole]||window.currentUserRole;
 
+  // Migração única: calcula o pró-labore das vendas antigas já recebidas que ainda não possuem valor registrado.
+  async function migrarProlaboreHistorico(){
+    const cfg=DB.config||(DB.config={});
+    if(cfg.migracaoProlaboreHistoricoV1) return;
+    let atualizadas=0, semCusto=0;
+    (DB.vendas||[]).forEach(v=>{
+      if(Object.prototype.hasOwnProperty.call(v,'prolaboreValor') && v.prolaboreValor!==null && v.prolaboreValor!=='') return;
+      if(window.vendaAguardandoAcerto && window.vendaAguardandoAcerto(v)) return;
+      const custo=saleCost(v);
+      if(!Number.isFinite(custo) || custo<0){semCusto++;return;}
+      v.prolaboreValor=window.calcularProlaboreVenda?window.calcularProlaboreVenda(v):0;
+      v.prolaborePercentual=pctRetirada();
+      v.prolaboreHistoricoMigrado=true;
+      atualizadas++;
+    });
+    cfg.migracaoProlaboreHistoricoV1=true;
+    cfg.migracaoProlaboreHistoricoEm=new Date().toISOString();
+    if(atualizadas) await window.saveKey('vendas',DB.vendas);
+    await window.saveKey('config',cfg);
+    if(atualizadas) console.info('Migração histórica de pró-labore concluída:',atualizadas,'venda(s).');
+    if(semCusto) console.warn('Migração de pró-labore: '+semCusto+' venda(s) não migradas por falta de custo completo.');
+  }
+
   // CORREÇÃO 4: boot unificado, chamado pelo onAuthStateChanged do primeiro <script>
   window.__bootApp = async function(){
     const el = document.getElementById('currentUserEmail');
@@ -4426,6 +4444,7 @@ ${baseConfig.cuidados}
       try { await carregarUsuarios(); } catch {}
       try { await conciliarBaixasVendedores(); } catch (e) { console.error('Conciliação de vendas de vendedores falhou:', e); }
       publicarEtiquetasVendedor();
+      try { await migrarProlaboreHistorico(); } catch (e) { console.error('Migração histórica de pró-labore falhou:', e); }
     }
 
     if (typeof window.render === 'function') await window.render();
